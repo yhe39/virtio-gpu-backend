@@ -1,0 +1,125 @@
+#!/bin/bash
+#
+# Copyright (C) 2021-2022 Intel Corporation.
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# crashlogctl is part of acrn-hypervisor.
+#
+
+declare -a CRASHLOG_SERVICES=(
+  acrnprobe.service
+  usercrash.service
+)
+
+SCRIPT="$0"
+CRASHLOG_SHARE_DIR=/usr/share/acrn/crashlog
+CRASHLOG_SYSTEM_CONF=${CRASHLOG_SHARE_DIR}/40-watchdog.conf
+CRASHLOG_SYSCTL_CONF=${CRASHLOG_SHARE_DIR}/80-coredump.conf
+CRASHLOG_VAR_DIR=/var/log/crashlog
+CRASHLOG_CORE_BACKUP=${CRASHLOG_VAR_DIR}/default_core_pattern
+CORE_PATTERN_CONF="/proc/sys/kernel/core_pattern"
+
+exit_ok() {
+  echo "$1" > /dev/stderr
+  exit 0
+}
+
+exit_err() {
+  echo "$1" > /dev/stderr
+  exit 1
+}
+
+notice() {
+  echo "$1" > /dev/stderr
+}
+
+for_each_service() {
+  local action=$1 && shift
+  local -a array=($*)
+  for service in "${array[@]}"; do
+    systemctl $action $service
+    [ $? -ne 0 ] && notice "Failed to $action ${service}. Continuing..."
+  done
+}
+
+crashlog_enable() {
+
+  # backup the default core_pattern
+  if [ -f ${CRASHLOG_CORE_BACKUP} ]
+  then
+      notice "... ${CRASHLOG_CORE_BACKUP} already exist. Do not perform backup"
+  else
+      cat ${CORE_PATTERN_CONF} > ${CRASHLOG_CORE_BACKUP}
+      notice "... Backup core pattern to ${CRASHLOG_CORE_BACKUP}"
+  fi
+
+  # Copy watchdog and coredump conf files
+  mkdir -p /etc/systemd/system.conf.d
+  cp -v ${CRASHLOG_SYSTEM_CONF} /etc/systemd/system.conf.d
+  mkdir -p /etc/sysctl.d
+  cp -v ${CRASHLOG_SYSCTL_CONF} /etc/sysctl.d
+
+  # Enable chrashlog services
+  for_each_service "enable" ${CRASHLOG_SERVICES[@]}
+
+  exit_ok "*** Please reboot your system. ***"
+}
+
+crashlog_disable() {
+  # Disable chrashlog services
+  for_each_service "disable" ${CRASHLOG_SERVICES[@]}
+
+  rm -v /etc/sysctl.d/${CRASHLOG_SYSCTL_CONF##*/}
+  rm -v /etc/systemd/system.conf.d/${CRASHLOG_SYSTEM_CONF##*/}
+
+  rm -f ${CRASHLOG_CORE_BACKUP}
+
+  exit_ok "*** Please reboot your system. ***"
+}
+
+crashlog_is_active() {
+  # check only activation units
+  echo "acrnprobe  :" $(systemctl is-active acrnprobe.service)
+  echo "usercrash  :" $(systemctl is-active usercrash.service)
+}
+
+
+usage() {
+  format='  %-10s %s\n'
+  printf "\n"
+  printf "%s - Control actions for ACRN crashlog services\n" "$SCRIPT"
+  printf "\n"
+  printf "$format" "enable"  "Enable the ACRN crashlog services"
+  printf "$format" "disable" "Disable the ACRN crashlog services"
+  printf "$format" "is-active" "Checks if ACRN crashlog is active"
+  printf "\n"
+  exit 2
+}
+
+if [ $# -ne 1 ]; then
+     usage
+fi
+
+if [ $EUID -ne 0 ]; then
+  exit_err "Must be root to run this command. Exiting..."
+fi
+
+SUBCOMMAND=$1
+
+case $SUBCOMMAND in
+  enable)
+    crashlog_enable ;;
+  disable)
+    crashlog_disable ;;
+  is-active)
+    crashlog_is_active ;;
+  --help | -h)
+    usage ;;
+  *)
+    notice "Unknown command passed to $SCRIPT"
+    usage ;;
+esac
+
+exit 0
+
+# vi: ts=8 sw=2 sts=2 et tw=80

@@ -1,0 +1,5 @@
+defusedxml
+lxml
+elementpath>=2.5.0
+xmlschema
+tqdm

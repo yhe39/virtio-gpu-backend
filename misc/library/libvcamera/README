@@ -1,0 +1,13 @@
+# libvcamhal.so
+
+libvcamhal.so is a converter which transforms the C++ based libcamhal.so to C-based interfaces.
+
+In addition, acrn-dm cannot access some element of C++ language(eg. the Class and Reference), so we also convert these in this module.
+
+## Build instructions:
+- Dependencies: ipu6-camera-hal
+
+- Build and install:
+1. build and install the libvcamhal.so
+make
+make install

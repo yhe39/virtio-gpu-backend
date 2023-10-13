@@ -1,0 +1,69 @@
+cc_binary {
+    name: "acrn-virtio-gpu",
+
+    srcs: ["acrn-virtio-gpu.c",
+        "shmem_ivshm_ivshmem.c",
+        "virtio.c",
+        "virtio_over_shmem.c",
+        "dm_helpers.c",
+        "dm_stubs.c",
+        "utils.c",
+	"devicemodel/lib/dm_string.c",
+	"devicemodel/core/mevent.c",
+	"devicemodel/core/timer.c",
+	"devicemodel/hw/block_if.c",
+	"devicemodel/hw/gc.c",
+	"devicemodel/hw/vga.c",
+	"devicemodel/hw/vdisplay_sdl.c",
+	"devicemodel/hw/pci/virtio/vhost.c",
+    ],
+
+    local_include_dirs: [
+        "devicemodel/include/public",
+        "misc/library/include",
+	"devicemodel/include",
+    ],
+
+    stl: "libc++_static",
+    cppflags: ["-std=c++14"],
+
+    shared_libs: [
+        "libcutils",
+        "libEGL",
+        "libGLESv2",
+        "libui",
+        "libgui",
+        "libutils",
+	"libdrm",
+        "libbase",
+        "liblog",
+        "libz",
+        "libsync",
+	"libc",
+    ],
+
+    header_libs: [
+        "libnativebase_headers",
+        "libsystem_headers",
+    ],
+
+    export_header_lib_headers: [
+        "libnativebase_headers",
+        "libsystem_headers",
+    ],
+
+    static_libs: [
+	"libarect",
+    ],
+
+    export_static_lib_headers: [
+	"libarect",
+    ],
+
+    cflags: [
+	"-pthread",
+        "-Wall",
+    ],
+
+relative_install_path: "hw"
+}

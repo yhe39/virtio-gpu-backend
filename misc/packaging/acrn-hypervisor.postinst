@@ -1,0 +1,135 @@
+#!/bin/bash
+#* Copyright (c) 2020-2022 Intel Corporation SPDX-License-Identifier: BSD-3-Clause
+# postinst script for acrn-hypervisor
+# please NOTE ！！！  scenario_info/board_info changed by python scripts, so do not add content there!!!
+# please NOTE ！！！  scenario_info/board_info please add in release.json if needed !!!
+set -e
+
+#Build info Start
+
+SCENARIO=(shared)
+
+BOARD=(nuc11tnbi5)
+
+#Build info End
+
+
+#ACRN parameters Start
+
+GENERATED_PARAMS=(cpu_perf_policy=Performance)
+
+#ACRN parameters End
+
+ACRNBIN="/boot/acrn.${SCENARIO}.${BOARD}.bin"
+type=$(lsblk -l |awk '$NF == "/" {print $1}')
+
+pattern='^/dev/.* UUID="([^"]+)".* PARTUUID="([^"]+)"'
+while IFS= read -r line; do
+    if [[ $line =~ $pattern ]]; then
+        uuid="${BASH_REMATCH[1]}"
+        partuuid="${BASH_REMATCH[2]}"
+    fi
+done < <(blkid |grep ext4 |grep ${type})
+
+filename="/etc/grub.d/40_custom"
+
+if ls /boot/vmlinuz*acrn-service-vm* 1> /dev/null 2>&1;then
+    service_vm_kernel=$(ls -tr /boot/vmlinuz-*acrn-service-vm* | tail -1)
+else
+    service_vm_kernel=$(ls /boot/vmlinuz-* | tail -1)
+fi
+kernelimg="module2 $service_vm_kernel Linux_bzImage"
+
+if [ $SCENARIO == hybrid ];then
+    echo -e "\E[32m Please put zephyr64.elf in the /boot/ directory"
+    tput sgr0
+    cat>"${filename}"<<EOF
+#!/bin/sh
+exec tail -n +3 \$0
+menuentry 'ACRN multiboot2 ' --id ACRN_deb_multiboot2 {
+    load_video
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    search --no-floppy --fs-uuid  --set $uuid
+multiboot2 $ACRNBIN root=PARTUUID=$partuuid $GENERATED_PARAMS
+$kernelimg
+module2 /boot/zephyr64.elf Zephyr_ElfImage
+module2 /boot/ACPI_VM0.bin ACPI_VM0
+}
+
+EOF
+elif [ $SCENARIO == hybrid_rt ];then
+    echo -e "\E[32m Please put bzImage_RT in the /boot/ directory"
+    tput sgr0
+    cat>"${filename}"<<EOF
+#!/bin/sh
+exec tail -n +3 \$0
+menuentry 'ACRN multiboot2 ' --id ACRN_deb_multiboot2 {
+    load_video
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    search --no-floppy --fs-uuid  --set $uuid
+multiboot2 $ACRNBIN root=PARTUUID=$partuuid $GENERATED_PARAMS
+$kernelimg
+module2 /boot/bzImage_RT RT_bzImage
+module2 /boot/ACPI_VM0.bin ACPI_VM0
+}
+
+EOF
+elif [ $SCENARIO == partitioned ];then
+    cat>"${filename}"<<EOF
+#!/bin/sh
+exec tail -n +3 \$0
+menuentry 'ACRN multiboot2 ' --id ACRN_deb_multiboot2 {
+    load_video
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    search --no-floppy --fs-uuid  --set $uuid
+    echo 'loading ACRN...'
+multiboot2 $ACRNBIN root=PARTUUID=$partuuid $GENERATED_PARAMS
+$kernelimg
+module2 /boot/ACPI_VM0.bin ACPI_VM0
+module2 /boot/ACPI_VM1.bin ACPI_VM1
+}
+
+EOF
+else
+    cat>"${filename}"<<EOF
+#!/bin/sh
+exec tail -n +3 \$0
+menuentry 'ACRN multiboot2 ' --id ACRN_deb_multiboot2 {
+    load_video
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    search --no-floppy --fs-uuid  --set $uuid
+multiboot2 $ACRNBIN root=PARTUUID=$partuuid $GENERATED_PARAMS
+$kernelimg
+
+}
+
+EOF
+fi
+
+filename='/etc/default/grub'
+sed -i '/GRUB_DEFAULT=/d' ${filename}
+sed -i '/GRUB_TIMEOUT=/d' ${filename}
+sed -i '/GRUB_HIDDEN_TIMEOUT=/d' ${filename}
+sed -i '/GRUB_CMDLINE_LINUX_DEFAULT=/d' ${filename}
+sed -i '/GRUB_CMDLINE_LINUX=/d' ${filename}
+sed -i '/GRUB_TERMINAL=/d' ${filename}
+sed -i '/GRUB_SERIAL_COMMAND=/d' ${filename}
+sed -i '$a GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"' ${filename}
+sed -i '$a GRUB_TERMINAL="console serial"' ${filename}
+sed -i '$a GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"' ${filename}
+sed -i '$a GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200n8"' ${filename}
+sed -i '$a GRUB_DEFAULT=ACRN_deb_multiboot2' ${filename}
+sed -i '$a GRUB_TIMEOUT=20' ${filename}
+
+sync
+update-grub
+
+exit 0

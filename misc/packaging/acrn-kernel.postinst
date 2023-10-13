@@ -1,0 +1,34 @@
+#!/bin/bash
+#* Copyright (c) 2020-2022 Intel Corporation.
+# postinst script for acrn kernel
+filename="/etc/grub.d/40_custom"
+menu=$(grep ACRN_deb_multiboot2 ${filename}) || true
+type=$(lsblk -l |awk '$NF == "/" {print $1}')
+str=$(blkid |grep ${type})
+uuid=$(echo $str |cut -d " " -f 2|cut -d "=" -f 2)
+str=$(blkid |grep ${type})
+partuuid=$(echo ${str##*PARTUUID=})
+if [ -z "$menu" ]
+then
+cat>"${filename}"<<EOF
+    #!/bin/sh
+    exec tail -n +3 \$0
+    menuentry 'ACRN multiboot2 ' --id ACRN_deb_multiboot2 {
+            load_video
+            insmod gzio
+            insmod part_gpt
+            insmod ext2
+        search --no-floppy --fs-uuid  --set $uuid
+    multiboot2 /boot/acrn.bin root=PARTUUID=$partuuid
+
+        }
+
+EOF
+    fi
+
+    sed -i '/module/d' ${filename} || true
+    bzImage=$(cat /boot/version.txt)
+    sed -i '/multiboot2 \/boot/a\module2 /boot/'${bzImage}' Linux_bzImage' ${filename}
+
+sync
+update-grub
