@@ -5,8 +5,8 @@
 
 extern struct pci_vdev_ops pci_ops_virtio_gpu;
 
-static void init_vdpy(struct virtio_backend_info *info) {
-	vdpy_parse_cmd_option(info->opts);
+static void init_vdpy(struct virtio_backend_info *info __attribute__((unused))) {
+//	vdpy_parse_cmd_option(info->opts);
 }
 
 static struct virtio_backend_info virtio_gpu_info = {

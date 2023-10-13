@@ -312,7 +312,7 @@ vga_render(struct gfx_ctx *gc, void *arg)
 }
 
 static uint64_t
-vga_mem_rd_handler(struct vmctx *ctx, uint64_t addr, void *arg1)
+vga_mem_rd_handler(struct vmctx *ctx __attribute__((unused)), uint64_t addr, void *arg1)
 {
 	struct vga_vdev *vd = arg1;
 	uint8_t map_sel;
@@ -395,7 +395,7 @@ vga_mem_rd_handler(struct vmctx *ctx, uint64_t addr, void *arg1)
 }
 
 static void
-vga_mem_wr_handler(struct vmctx *ctx, uint64_t addr, uint8_t val, void *arg1)
+vga_mem_wr_handler(struct vmctx *ctx __attribute__((unused)), uint64_t addr, uint8_t val, void *arg1)
 {
 	struct vga_vdev *vd = arg1;
 	uint8_t c0, c1, c2, c3;
@@ -671,8 +671,8 @@ vga_mem_wr_handler(struct vmctx *ctx, uint64_t addr, uint8_t val, void *arg1)
 }
 
 static int
-vga_mem_handler(struct vmctx *ctx, int vcpu, int dir, uint64_t addr,
-		int size, uint64_t *val, void *arg1, long arg2)
+vga_mem_handler(struct vmctx *ctx, int vcpu __attribute__((unused)), int dir, uint64_t addr,
+		int size, uint64_t *val, void *arg1, long arg2 __attribute__((unused)))
 {
 	if (dir == MEM_F_WRITE) {
 		switch (size) {
@@ -732,7 +732,7 @@ vga_mem_handler(struct vmctx *ctx, int vcpu, int dir, uint64_t addr,
 }
 
 int
-vga_port_in_handler(struct vmctx *ctx, int in, int port, int bytes,
+vga_port_in_handler(struct vmctx *ctx __attribute__((unused)), int in __attribute__((unused)), int port, int bytes __attribute__((unused)),
 		    uint8_t *val, void *arg)
 {
 	struct vga_vdev *vd = arg;
@@ -958,7 +958,7 @@ vga_port_in_handler(struct vmctx *ctx, int in, int port, int bytes,
 }
 
 int
-vga_port_out_handler(struct vmctx *ctx, int in, int port, int bytes,
+vga_port_out_handler(struct vmctx *ctx __attribute__((unused)), int in __attribute__((unused)), int port, int bytes __attribute__((unused)),
 		     uint8_t val, void *arg)
 {
 	struct vga_vdev *vd = arg;
@@ -1233,7 +1233,7 @@ vga_port_out_handler(struct vmctx *ctx, int in, int port, int bytes,
 }
 
 static int
-vga_port_handler(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
+vga_port_handler(struct vmctx *ctx, int vcpu __attribute__((unused)), int in, int port, int bytes,
 		 uint32_t *eax, void *arg)
 {
 	uint8_t val;
@@ -1365,7 +1365,7 @@ vga_init(struct gfx_ctx *gc, int io_only)
 }
 
 void
-vga_ioport_write(struct vmctx *ctx, int vcpu, struct vga *vga,
+vga_ioport_write(struct vmctx *ctx, int vcpu __attribute__((unused)), struct vga *vga,
 			uint64_t offset, int size, uint64_t value)
 {
 	uint8_t val;
@@ -1385,7 +1385,7 @@ vga_ioport_write(struct vmctx *ctx, int vcpu, struct vga *vga,
 }
 
 uint64_t
-vga_ioport_read(struct vmctx *ctx, int vcpu, struct vga *vga,
+vga_ioport_read(struct vmctx *ctx, int vcpu __attribute__((unused)), struct vga *vga,
 	       uint64_t offset, int size)
 {
 	uint64_t value;
@@ -1409,7 +1409,7 @@ vga_ioport_read(struct vmctx *ctx, int vcpu, struct vga *vga,
 }
 
 void
-vga_vbe_write(struct vmctx *ctx, int vcpu, struct vga *vga,
+vga_vbe_write(struct vmctx *ctx __attribute__((unused)), int vcpu __attribute__((unused)), struct vga *vga,
 	       uint64_t offset, int size, uint64_t value)
 {
 	uint8_t *p;
@@ -1462,7 +1462,7 @@ vga_vbe_write(struct vmctx *ctx, int vcpu, struct vga *vga,
 }
 
 uint64_t
-vga_vbe_read(struct vmctx *ctx, int vcpu, struct vga *vga,
+vga_vbe_read(struct vmctx *ctx __attribute__((unused)), int vcpu __attribute__((unused)), struct vga *vga,
 	      uint64_t offset, int size)
 {
 	uint8_t *p;

@@ -418,11 +418,19 @@ mevent_dispatch(void)
 	 * the blocking kqueue call to exit by writing to it. Set the
 	 * descriptor to non-blocking.
 	 */
-	ret = pipe2(mevent_pipefd, O_NONBLOCK);
+//	ret = pipe2(mevent_pipefd, O_NONBLOCK);
+	ret = pipe(mevent_pipefd);
 	if (ret < 0) {
 		pr_err("pipe");
 		exit(0);
 	}
+	int flags;
+	flags = fcntl(mevent_pipefd[0], F_GETFL);
+	flags |= O_NONBLOCK;
+	fcntl(mevent_pipefd[0], F_SETFL, flags);
+	flags = fcntl(mevent_pipefd[1], F_GETFL);
+	flags |= O_NONBLOCK;
+	fcntl(mevent_pipefd[1], F_SETFL, flags);
 
 	/*
 	 * Add internal event handler for the pipe write fd

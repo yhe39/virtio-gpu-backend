@@ -338,26 +338,27 @@ blockif_proc(struct blockif_ctxt *bc, struct blockif_elem *be)
 	err = 0;
 	switch (be->op) {
 	case BOP_READ:
-		len = preadv(bc->fd, br->iov, br->iovcnt,
-				 br->offset + bc->sub_file_start_lba);
-		if (len < 0)
-			err = errno;
-		else
-			br->resid -= len;
+		if (lseek(bc->fd, br->offset + bc->sub_file_start_lba, SEEK_SET) >= 0) {
+		        len = read(bc->fd, br->iov, br->iovcnt);
+			if (len < 0)
+				err = errno;
+			else
+				br->resid -= len;
+		}
 		break;
 	case BOP_WRITE:
 		if (bc->rdonly) {
 			err = EROFS;
 			break;
 		}
-
-		len = pwritev(bc->fd, br->iov, br->iovcnt,
-				  br->offset + bc->sub_file_start_lba);
-		if (len < 0)
-			err = errno;
-		else {
-			br->resid -= len;
-			err = blockif_flush_cache(bc);
+		if (lseek(bc->fd, br->offset + bc->sub_file_start_lba, SEEK_SET) >=0 ) {
+			len = write(bc->fd, br->iov, br->iovcnt);
+			if (len < 0)
+				err = errno;
+			else {
+				br->resid -= len;
+				err = blockif_flush_cache(bc);
+			}
 		}
 		break;
 	case BOP_FLUSH:

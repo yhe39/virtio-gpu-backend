@@ -222,7 +222,7 @@ close_evt_fds:
 	return ret;
 }
 
-int vos_backend_run(void)
+void vos_backend_run(void)
 {
 	if (signal(SIGHUP, sig_handler_term) == SIG_ERR)
 		fprintf(stderr, "cannot register handler for SIGHUP\n");

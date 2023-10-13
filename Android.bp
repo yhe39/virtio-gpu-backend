@@ -14,8 +14,8 @@ cc_binary {
 	"devicemodel/hw/block_if.c",
 	"devicemodel/hw/gc.c",
 	"devicemodel/hw/vga.c",
-	"devicemodel/hw/vdisplay_sdl.c",
 	"devicemodel/hw/pci/virtio/vhost.c",
+	"devicemodel/hw/pci/virtio/virtio_gpu.c"
     ],
 
     local_include_dirs: [
@@ -25,6 +25,12 @@ cc_binary {
     ],
 
     stl: "libc++_static",
+    cflags: [
+        "-pthread",
+        "-Wall",
+	"-D__USE_BSD",
+	"-D__USE_FILE_OFFSET64",
+    ],
     cppflags: ["-std=c++14"],
 
     shared_libs: [
@@ -58,11 +64,6 @@ cc_binary {
 
     export_static_lib_headers: [
 	"libarect",
-    ],
-
-    cflags: [
-	"-pthread",
-        "-Wall",
     ],
 
 relative_install_path: "hw"

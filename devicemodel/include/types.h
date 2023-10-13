@@ -6,12 +6,29 @@
 #define _TYPES_H_
 
 #include "macros.h"
-#include "sched_local.h"
 #include <stdint.h>
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/types.h>
 #include <pthread.h>
+
+#include <bits/timespec.h>
+#include <linux/sched.h>
+#include <sys/cdefs.h>
+#ifdef __LP64__
+#define CPU_SETSIZE 1024
+#else
+#define CPU_SETSIZE 32
+#endif
+#define __CPU_BITTYPE  unsigned long int  /* mandated by the kernel  */
+#define __CPU_BITS     (8 * sizeof(__CPU_BITTYPE))
+#define __CPU_ELT(x)   ((x) / __CPU_BITS)
+#define __CPU_MASK(x)  ((__CPU_BITTYPE)1 << ((x) & (__CPU_BITS - 1)))
+
+typedef struct {
+  __CPU_BITTYPE  __bits[ CPU_SETSIZE / __CPU_BITS ];
+} cpu_set_t;
+
 
 #define MAXCOMLEN   19      /* max command name remembered */
 #define MAXINTERP   PATH_MAX    /* max interpreter file name length */

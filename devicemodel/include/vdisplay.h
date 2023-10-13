@@ -10,7 +10,6 @@
 #define _VDISPLAY_H_
 
 #include <sys/queue.h>
-#include <pixman.h>
 #include "dm.h"
 
 #define VDPY_MAX_NUM 4
@@ -58,7 +57,7 @@ enum surface_type {
 struct surface {
 	enum surface_type surf_type;
 	/* use pixman_format as the intermediate-format */
-	pixman_format_code_t surf_format;
+//	pixman_format_code_t surf_format;
 	uint32_t x;
 	uint32_t y;
 	uint32_t width;
@@ -76,7 +75,7 @@ struct surface {
 struct cursor {
 	enum surface_type surf_type;
 	/* use pixman_format as the intermediate-format */
-	pixman_format_code_t surf_format;
+//	pixman_format_code_t surf_format;
 	uint32_t x;
 	uint32_t y;
 	uint32_t hot_x;

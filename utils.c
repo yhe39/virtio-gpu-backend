@@ -24,22 +24,13 @@ struct shmem_ops_info {
 };
 
 static struct shmem_ops *shmem_ops[] = {
-	&uio_shmem_ops,
 	&ivshm_ivshmem_ops,
-	&ivshm_guest_shm_ops,
-	&sock_ivshmem_ops,
 	NULL
 };
 
 static bool starts_with(const char *s, const char *prefix)
 {
 	return strncmp(s, prefix, strlen(prefix)) == 0;
-}
-
-static bool ends_with(const char *s, const char *prefix)
-{
-	int len = strlen(s), plen = strlen(prefix);
-	return strncmp(s + (len - plen), prefix, plen) == 0;
 }
 
 static void usage(FILE *fp, int argc __attribute__((unused)), char **argv)
@@ -64,12 +55,8 @@ static int infer_shmem_ops(struct virtio_backend_info *info)
 	if (info->shmem_devpath == NULL)
 		return -1;
 
-	if (starts_with(info->shmem_devpath, "/dev/uio")) {
-		info->shmem_ops = &uio_shmem_ops;
-	} else if (starts_with(info->shmem_devpath, "/dev/ivshm")) {
+	if (starts_with(info->shmem_devpath, "/dev/ivshm")) {
 		info->shmem_ops = &ivshm_ivshmem_ops;
-	} else if (ends_with(info->shmem_devpath, ".sock")) {
-		info->shmem_ops = &sock_ivshmem_ops;
 	} else {
 		return -1;
 	}
