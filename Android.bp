@@ -29,7 +29,6 @@ cc_binary {
         "-pthread",
         "-Wall",
 	"-D__USE_BSD",
-	"-D__USE_FILE_OFFSET64",
     ],
     cppflags: ["-std=c++14"],
 
