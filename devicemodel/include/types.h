@@ -15,19 +15,6 @@
 #include <bits/timespec.h>
 #include <linux/sched.h>
 #include <sys/cdefs.h>
-#ifdef __LP64__
-#define CPU_SETSIZE 1024
-#else
-#define CPU_SETSIZE 32
-#endif
-#define __CPU_BITTYPE  unsigned long int  /* mandated by the kernel  */
-#define __CPU_BITS     (8 * sizeof(__CPU_BITTYPE))
-#define __CPU_ELT(x)   ((x) / __CPU_BITS)
-#define __CPU_MASK(x)  ((__CPU_BITTYPE)1 << ((x) & (__CPU_BITS - 1)))
-
-typedef struct {
-  __CPU_BITTYPE  __bits[ CPU_SETSIZE / __CPU_BITS ];
-} cpu_set_t;
 
 
 #define MAXCOMLEN   19      /* max command name remembered */
@@ -35,7 +22,6 @@ typedef struct {
 #define MAXLOGNAME  33      /* max login name length (incl. NUL) */
 #define SPECNAMELEN 63      /* max length of devicename */
 
-typedef cpu_set_t cpuset_t;
 typedef uint64_t vm_paddr_t;
 typedef uint64_t vm_ooffset_t;
 typedef uint64_t cap_ioctl_t;

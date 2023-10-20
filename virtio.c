@@ -678,7 +678,7 @@ virtio_set_modern_bar(struct virtio_base *base, bool use_notify_pio __attribute_
 
 	vops = base->vops;
 
-	if (!vops || (base->device_caps & (1UL << VIRTIO_F_VERSION_1)) == 0)
+	if (!vops || (base->device_caps & (1ULL << VIRTIO_F_VERSION_1)) == 0)
 		return -1;
 
 	return rc;
