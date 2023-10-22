@@ -27,7 +27,7 @@ struct shmem_info {
 
 	int nr_vecs;
 
-	void *private;
+	void *private_data;
 };
 
 extern struct shmem_ops uio_shmem_ops;

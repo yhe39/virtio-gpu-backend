@@ -160,13 +160,13 @@ int vos_backend_init(struct virtio_backend_info *info)
 		}
 	}
 
-        ret = info->shmem_ops->open(info->shmem_devpath, &shmem_info, evt_fds, MAX_IRQS);
+	ret = info->shmem_ops->open(info->shmem_devpath, &shmem_info, evt_fds, MAX_IRQS);
 	if (ret < 0) {
 		ret = errno;
 		goto close_evt_fds;
 	}
 
-	printf("Shared memory size: 0x%lx\n", shmem_info.mem_size);
+	printf("Shared memory size: 0x%lx\n", (unsigned long)shmem_info.mem_size);
 	printf("Number of interrupt vectors: %d\n", shmem_info.nr_vecs);
 	printf("This ID: %d\n", shmem_info.this_id);
 
@@ -192,6 +192,7 @@ int vos_backend_init(struct virtio_backend_info *info)
 		ret = -1;
 		goto deregister_mevents;
 	}
+	info->vdev_inited = true;
 
 	virtio_header->device_id = pci_get_cfgdata16(&pci_vdev, PCIR_SUBDEV_0);
 	virtio_header->vendor_id = pci_get_cfgdata16(&pci_vdev, PCIR_SUBVEND_0);
@@ -244,4 +245,8 @@ void vos_backend_deinit(void)
 	}
 	shmem_info.ops->close(&shmem_info);
 	mevent_deinit();
+
+	if (pci_vdev.dev_ops->vdev_deinit) {
+		pci_vdev.dev_ops->vdev_deinit(pci_vdev.vmctx, &pci_vdev, NULL);
+	}
 }

@@ -10,11 +10,17 @@
 #include "shmem.h"
 
 struct virtio_backend_info {
+	// init at runtime
 	struct shmem_ops *shmem_ops;
 	const char *shmem_devpath;
 
 	char *opts;
 
+	pthread_t tid;
+	void *native_window;
+	bool vdev_inited;
+
+	// driver static data
 	struct pci_vdev_ops *pci_vdev_ops;
 
 	void (*hook_before_init)(struct virtio_backend_info *info);

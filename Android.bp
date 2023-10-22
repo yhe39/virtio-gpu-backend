@@ -1,13 +1,71 @@
-cc_binary {
-    name: "acrn-virtio-gpu",
+package {
+    default_applicable_licenses: ["Android-Apache-2.0"],
+}
 
-    srcs: ["acrn-virtio-gpu.c",
+cc_library_static {
+    name: "libpixman",
+    
+    sdk_version: "current",
+    sdk_variant_only: true,
+
+    srcs: [
+        "pixman/pixman/pixman-access-accessors.c",
+        "pixman/pixman/pixman-access.c",
+        "pixman/pixman/pixman-arm.c",
+        "pixman/pixman/pixman-bits-image.c",
+        "pixman/pixman/pixman-combine-float.c",
+        "pixman/pixman/pixman-combine32.c",
+        "pixman/pixman/pixman-conical-gradient.c",
+        "pixman/pixman/pixman-fast-path.c",
+        "pixman/pixman/pixman-general.c",
+        "pixman/pixman/pixman-gradient-walker.c",
+        "pixman/pixman/pixman-image.c",
+        "pixman/pixman/pixman-implementation.c",
+        "pixman/pixman/pixman-linear-gradient.c",
+        "pixman/pixman/pixman-matrix.c",
+        "pixman/pixman/pixman-mips.c",
+        "pixman/pixman/pixman-noop.c",
+        "pixman/pixman/pixman-ppc.c",
+        "pixman/pixman/pixman-radial-gradient.c",
+        "pixman/pixman/pixman-region16.c",
+        "pixman/pixman/pixman-region32.c",
+        "pixman/pixman/pixman-solid-fill.c",
+        "pixman/pixman/pixman-utils.c",
+        "pixman/pixman/pixman-x86.c",
+        "pixman/pixman/pixman.c",
+    ],
+
+    local_include_dirs: [
+        "pixman/pixman/",
+    ],
+
+    cflags: [
+        "-D_USE_MATH_DEFINES",
+        "-DPIXMAN_NO_TLS",
+        "-DPACKAGE=\"android-cairo\"",
+        "-Wno-unused-parameter",
+        "-Wno-missing-field-initializers",
+        "-Wno-unused-const-variable",
+        "-Wno-unused-local-typedef",
+    ],
+
+    export_include_dirs: ["pixman/pixman/"],
+}
+
+cc_library_shared {
+    name: "libacrn_virtio_gpu",
+
+    sdk_version: "current",
+    sdk_variant_only: true,
+
+    srcs: [
         "shmem_ivshm_ivshmem.c",
         "virtio.c",
         "virtio_over_shmem.c",
         "dm_helpers.c",
         "dm_stubs.c",
         "utils.c",
+        "main.cpp",
 	"devicemodel/lib/dm_string.c",
 	"devicemodel/core/mevent.c",
 	"devicemodel/core/timer.c",
@@ -15,7 +73,8 @@ cc_binary {
 	"devicemodel/hw/gc.c",
 	"devicemodel/hw/vga.c",
 	"devicemodel/hw/pci/virtio/vhost.c",
-	"devicemodel/hw/pci/virtio/virtio_gpu.c"
+	"devicemodel/hw/pci/virtio/virtio_gpu.c",
+    "devicemodel/hw/vdisplay_egl.c",
     ],
 
     local_include_dirs: [
@@ -28,42 +87,39 @@ cc_binary {
     cflags: [
         "-pthread",
         "-Wall",
-	"-D__USE_BSD",
+        "-D__USE_BSD",
     ],
     cppflags: ["-std=c++14"],
 
     shared_libs: [
-        "libcutils",
         "libEGL",
         "libGLESv2",
-        "libui",
-        "libgui",
-        "libutils",
-	"libdrm",
-        "libbase",
         "liblog",
         "libz",
         "libsync",
-	"libc",
+        "libc",
+        "libagq",
+        "libandroid",
     ],
 
     header_libs: [
-        "libnativebase_headers",
-        "libsystem_headers",
+        "jni_headers",
     ],
 
     export_header_lib_headers: [
-        "libnativebase_headers",
-        "libsystem_headers",
     ],
 
     static_libs: [
-	"libarect",
+    "android_native_app_glue",
+    "libpixman",
+    ],
+    ldflags: [
+        "-uANativeActivity_onCreate",
     ],
 
     export_static_lib_headers: [
-	"libarect",
     ],
 
 relative_install_path: "hw"
 }
+ 
