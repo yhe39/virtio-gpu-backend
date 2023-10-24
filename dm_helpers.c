@@ -12,6 +12,10 @@
 #include "virtio_over_shmem.h"
 #include "utils.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
+
 bool is_winvm = false;
 bool stdio_in_use = false;
 
@@ -32,7 +36,11 @@ void output_log(uint8_t level __attribute__((unused)), const char *fmt, ...)
 	va_list args;
 
 	va_start(args, fmt);
+#ifdef ANDROID
+    __android_log_vprint (ANDROID_LOG_INFO, "backend" , fmt, args);
+#else
 	vprintf(fmt, args);
+#endif
 	va_end(args);
 }
 

@@ -41,6 +41,7 @@ struct state {
 	bool is_wayland;
 	bool is_x11;
 	bool is_fullscreen;
+	bool is_termed;
 	uint64_t updates;
 	int n_connect;
 };
@@ -1562,7 +1563,7 @@ vdpy_sdl_display_term()
 }
 
 void *
-vdpy_sdl_display_proc()
+vdpy_sdl_display_proc(bool termed)
 {
 	struct vdpy_display_bh *bh;
 
@@ -1571,6 +1572,14 @@ vdpy_sdl_display_proc()
 		return NULL;
 	}
 	pthread_mutex_lock(&vdpy.vdisplay_mutex);
+
+	if (termed) {
+		pr_info("%s is_termed\n", __func__);
+		if (vdpy.s.is_termed != termed)
+			vdpy.s.is_termed = termed;
+		pthread_mutex_unlock(&vdpy.vdisplay_mutex);
+		return NULL;
+	}
 
 	if (TAILQ_EMPTY(&vdpy.request_list))
 		pthread_cond_wait(&vdpy.vdisplay_signal,
@@ -1603,11 +1612,14 @@ bool vdpy_submit_bh(int handle, struct vdpy_display_bh *bh_task)
 	bool bh_ok = false;
 
 	if (handle != vdpy.s.n_connect) {
+		pr_info("%s handle != vdpy.s.n_connect\n", __func__);
 		return bh_ok;
 	}
 
-	if (!vdpy.s.is_active)
+	if (!vdpy.s.is_active) {
+		pr_info("%s !vdpy.s.is_active\n", __func__);
 		return bh_ok;
+	}
 
 	pthread_mutex_lock(&vdpy.vdisplay_mutex);
 
@@ -1660,8 +1672,9 @@ vdpy_init(int *num_vscreens __attribute__((unused)))
 	return vdpy.s.n_connect;
 #endif
 	*num_vscreens = 1;
+	vdpy.s.n_connect = 1;
 	vdpy_sdl_display_init();
-	return 0;
+	return vdpy.s.n_connect;
 }
 
 int
@@ -1687,7 +1700,15 @@ vdpy_deinit(int handle __attribute__((unused)))
 	pthread_join(vdpy.tid, NULL);
 	pr_info("Exit SDL display thread\n");
 	#endif
+
+	while (!vdpy.s.is_termed) {
+		usleep(10000);
+	}
+
+	vdpy.s.is_active = 0;
+	vdpy.s.n_connect--;
 	vdpy_sdl_display_term();
+	pr_info("Exit SDL display thread\n");
 	return 0;
 }
 
@@ -1798,7 +1819,6 @@ vdpy_gfx_ui_init(void *data)
 		pr_err("%s, memory allocation for vscrs failed.", __func__);
 		return -1;
 	}
-	vdpy.s.n_connect = 1;
 	
 	vscr = &vdpy.vscrs[0];
 	vscr->is_fullscreen = true;
@@ -1835,7 +1855,7 @@ vdpy_gfx_ui_init(void *data)
     EGLNativeWindowType window = (EGLNativeWindowType)data;
     vdpy.eglSurface = eglCreateWindowSurface(vdpy.eglDisplay, myConfig, window, NULL);
     if (vdpy.eglSurface == EGL_NO_SURFACE) {
-        printf("gelCreateWindowSurface failed.\n");
+        pr_err("gelCreateWindowSurface failed.\n");
         return -1;
     }
 
@@ -1843,6 +1863,7 @@ vdpy_gfx_ui_init(void *data)
     returnValue = eglMakeCurrent(vdpy.eglDisplay, vdpy.eglSurface, vdpy.eglSurface, vdpy.eglContext);
     // checkEglError("eglMakeCurrent", returnValue);
     if (returnValue != EGL_TRUE) {
+        pr_err("eglMakeCurrent failed.\n");
         return -1;
     }
     eglQuerySurface(vdpy.eglDisplay, vdpy.eglSurface, EGL_WIDTH, &w);

@@ -112,6 +112,7 @@ cc_library_shared {
     static_libs: [
     "android_native_app_glue",
     "libpixman",
+    "libbase_ndk",
     ],
     ldflags: [
         "-uANativeActivity_onCreate",
@@ -120,6 +121,5 @@ cc_library_shared {
     export_static_lib_headers: [
     ],
 
-relative_install_path: "hw"
 }
  

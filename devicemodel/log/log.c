@@ -19,6 +19,9 @@
 #include "dm_string.h"
 #include "log.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
 
 DECLARE_LOGGER_SECTION();
 
@@ -126,7 +129,11 @@ static int init_console_setting(bool enable, uint8_t log_level)
 static void write_to_console(const char *fmt, va_list args)
 {
 	/* if no need add other info, just output */
+#ifdef ANDROID
+    __android_log_vprint (ANDROID_LOG_INFO, "backend" , fmt, args);
+#else
 	vprintf(fmt, args);
+#endif
 }
 
 static struct logger_ops logger_console = {
