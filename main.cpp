@@ -45,7 +45,7 @@ extern "C" {
 #include <android/log.h>
 #include <android_native_app_glue.h>
 
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "esUtil", __VA_ARGS__))
+#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "main", __VA_ARGS__))
 
 static void init_vdpy(struct virtio_backend_info *info) {
     vdpy_gfx_ui_init(info->native_window);
@@ -81,25 +81,31 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
             // We are not saving the state.
+            LOGI("APP_CMD_SAVE_STATE");
             break;
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
+            LOGI("APP_CMD_INIT_WINDOW");
             if (app->window != NULL) {
                 // renderer->initDisplay(app->window);
                 // renderer->draw();
+            LOGI("APP_CMD_INIT_WINDOW -1");
                 virtio_gpu_info.native_window = app->window;
                 create_backend_thread(&virtio_gpu_info);
                 animating = 1;
             }
+            LOGI("APP_CMD_INIT_WINDOW -2");
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
             //engine_term_display(engine);
             // renderer->terminateDisplay();
+            LOGI("APP_CMD_TERM_WINDOW");
             animating = 0;
             break;
         case APP_CMD_LOST_FOCUS:
             // Also stop animating.
+            LOGI("APP_CMD_LOST_FOCUS");
             animating = 0;
             // renderer->draw();
             break;
@@ -143,6 +149,7 @@ void android_main(struct android_app* state) {
             // Check if we are exiting.
             if (state->destroyRequested != 0) {
                 // renderer->terminateDisplay();
+                LOGI("state->destroyRequested != 0, exit...");
                 return;
             }
         }
@@ -166,7 +173,10 @@ void android_main(struct android_app* state) {
         }
         #endif
         
-        if (virtio_gpu_info.vdev_inited)
-            vdpy_sdl_display_proc();
+        if (virtio_gpu_info.vdev_inited) {
+            LOGI("vdpy_sdl_display_proc -0");
+            vdpy_sdl_display_proc(virtio_gpu_info.vdev_termed);
+            LOGI("vdpy_sdl_display_proc -1");
+        }
     }
 }

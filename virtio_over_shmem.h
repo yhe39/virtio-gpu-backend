@@ -19,6 +19,7 @@ struct virtio_backend_info {
 	pthread_t tid;
 	void *native_window;
 	bool vdev_inited;
+	bool vdev_termed;
 
 	// driver static data
 	struct pci_vdev_ops *pci_vdev_ops;
@@ -70,6 +71,6 @@ extern struct virtio_shmem_header *virtio_header;
 
 int vos_backend_init(struct virtio_backend_info *info);
 void vos_backend_run(void);
-void vos_backend_deinit(void);
+void vos_backend_deinit(struct virtio_backend_info *info);
 
 #endif  /* __BACKENDS_VIRTIO_OVER_SHMEM_H__ */

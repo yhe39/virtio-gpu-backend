@@ -120,7 +120,7 @@ void parse_shmem_args(struct virtio_backend_info *info, int argc, char *argv[])
 		}
 	}
 
-	printf("Backend options:\n"
+	pr_info("Backend options:\n"
 	       "Shared memory driver: %s\n"
 	       "Shared memory device path: %s\n"
 	       "Virtual device options: %s\n",
@@ -135,7 +135,7 @@ void set_shmem_args(struct virtio_backend_info *info)
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Backend options:\n"
+	pr_info("Backend options:\n"
 	       "Shared memory driver: %s\n"
 	       "Shared memory device path: %s\n"
 	       "Virtual device options: %s\n",
@@ -159,7 +159,7 @@ void *run_backend(void *data)
 
 	vos_backend_run();
 
-	vos_backend_deinit();
+	vos_backend_deinit(info);
 	return NULL;
 }
 
@@ -177,21 +177,21 @@ void dump_hex(void *base, int size)
 {
 	int i;
 
-	printf("==========");
+	pr_info("==========");
 	for (i = 0; i < size; i++) {
 		if ((i % 16) == 0) {
-			printf("\n0x%02x:", i);
+			pr_info("\n0x%02x:", i);
 		}
-		printf(" %02x", *((uint8_t*)((char*)base + i)));
+		pr_info(" %02x", *((uint8_t*)((char*)base + i)));
 	}
-	printf("\n==========\n");
+	pr_info("\n==========\n");
 }
 
 void dump_desc(volatile struct vring_desc *desc, int idx, bool cond __attribute__((unused)))
 {
-	printf("desc[%d] @ 0x%llx, size: %d, flags: 0x%x", idx, desc[idx].addr, desc[idx].len, desc[idx].flags);
+	pr_info("desc[%d] @ 0x%llx, size: %d, flags: 0x%x", idx, desc[idx].addr, desc[idx].len, desc[idx].flags);
 	if (desc[idx].flags & VRING_DESC_F_NEXT) {
-		printf(", next: %d", desc[idx].next);
+		pr_info(", next: %d", desc[idx].next);
 	}
-	printf("\n");
+	pr_info("\n");
 }

@@ -102,6 +102,6 @@ void gfx_ui_deinit();
 
 int vdpy_gfx_ui_init(void *data);
 void vdpy_gfx_ui_deinit();
-void *vdpy_sdl_display_proc();
+void *vdpy_sdl_display_proc(bool termed);
 
 #endif /* _VDISPLAY_H_ */

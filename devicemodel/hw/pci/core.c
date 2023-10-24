@@ -897,7 +897,7 @@ pci_emul_alloc_pbar(struct pci_vdev *pdi, int idx, uint64_t hostbase,
 		 * If this case always happens, we need to
 		 * change core.c code to ensure gvt firstly initialzed
 		 */
-		printf("%s failed to register_bar\n", pdi->name);
+		pr_err("%s failed to register_bar\n", pdi->name);
 		return error;
 	}
 

@@ -34,7 +34,7 @@ static struct pci_vdev pci_vdev;
 static void
 sig_handler_term(int signo __attribute__((unused)))
 {
-	printf("Received SIGINT to terminate application...\n");
+	pr_info("Received SIGINT to terminate application...\n");
 	vm_set_suspend_mode(VM_SUSPEND_POWEROFF);
 	mevent_notify();
 }
@@ -134,7 +134,7 @@ static void handle_requests(int fd, enum ev_type t __attribute__((unused)), void
 
 	if ((shmem_info.peer_id == -1) && (virtio_header->frontend_flags != 0)) {
 		shmem_info.peer_id = virtio_header->frontend_id;
-		printf("Frontend peer id: %d\n", shmem_info.peer_id);
+		pr_info("Frontend peer id: %d\n", shmem_info.peer_id);
 	}
 
         process_write_transaction(&pci_vdev);
@@ -166,9 +166,9 @@ int vos_backend_init(struct virtio_backend_info *info)
 		goto close_evt_fds;
 	}
 
-	printf("Shared memory size: 0x%lx\n", (unsigned long)shmem_info.mem_size);
-	printf("Number of interrupt vectors: %d\n", shmem_info.nr_vecs);
-	printf("This ID: %d\n", shmem_info.this_id);
+	pr_info("Shared memory size: 0x%lx\n", (unsigned long)shmem_info.mem_size);
+	pr_info("Number of interrupt vectors: %d\n", shmem_info.nr_vecs);
+	pr_info("This ID: %d\n", shmem_info.this_id);
 
 	for (i = 0; i < MAX_IRQS; i++) {
 		if (i < shmem_info.nr_vecs) {
@@ -231,13 +231,16 @@ void vos_backend_run(void)
 	if (signal(SIGINT, sig_handler_term) == SIG_ERR)
 		fprintf(stderr, "cannot register handler for SIGINT\n");
 
-	printf("Starting virtio device\n");
+	pr_info("Starting virtio device\n");
 	mevent_dispatch();
 }
 
-void vos_backend_deinit(void)
+void vos_backend_deinit(struct virtio_backend_info *info)
 {
 	int i;
+
+	info->vdev_inited = false;
+	info->vdev_termed = true;
 
 	for (i = 0; i < 2; i++) {
 		mevent_delete(mevents[i]);
