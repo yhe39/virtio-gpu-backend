@@ -12,7 +12,7 @@
 #include "io.h"
 #include "utils.h"
 
-#define MAX_VECTORS 2
+#define MAX_VECTORS 8
 
 #define IVSHMEM_BAR0_SIZE  256
 
