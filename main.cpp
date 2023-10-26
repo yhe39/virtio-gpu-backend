@@ -27,6 +27,12 @@ extern "C" {
 #include <vdisplay.h>
 }
 
+// #define USE_GAME_RENDER
+
+#ifdef USE_GAME_RENDER
+#include "game/renderer.h"
+#endif
+
 #include <cassert>
 #include <chrono>
 #include <cinttypes>
@@ -45,6 +51,11 @@ extern "C" {
 #include <android/log.h>
 #include <android_native_app_glue.h>
 
+
+#ifdef USE_GAME_RENDER
+using namespace std::chrono_literals;
+using namespace android::gamecore;
+#else
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "main", __VA_ARGS__))
 
 static void init_vdpy(struct virtio_backend_info *info) {
@@ -56,6 +67,7 @@ static struct virtio_backend_info virtio_gpu_info = {
 	.pci_vdev_ops = &pci_ops_virtio_gpu,
 	.hook_before_init = init_vdpy,
 };
+#endif
 
 namespace {
 int animating = 0;
@@ -75,8 +87,10 @@ int32_t engine_handle_input(struct android_app*, AInputEvent* event) {
  * Process the next main command.
  */
 void engine_handle_cmd(struct android_app* app, int32_t cmd) {
+#ifdef USE_GAME_RENDER
     //struct engine* engine = (struct engine*)app->userData;
-    // Renderer* renderer = reinterpret_cast<Renderer*>(app->userData);
+    Renderer* renderer = reinterpret_cast<Renderer*>(app->userData);
+#endif
 
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
@@ -87,19 +101,24 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
             // The window is being shown, get it ready.
             LOGI("APP_CMD_INIT_WINDOW");
             if (app->window != NULL) {
-                // renderer->initDisplay(app->window);
-                // renderer->draw();
             LOGI("APP_CMD_INIT_WINDOW -1");
+#ifdef USE_GAME_RENDER
+                renderer->initDisplay(app->window);
+                renderer->draw();
+#else
                 virtio_gpu_info.native_window = app->window;
                 create_backend_thread(&virtio_gpu_info);
+#endif
                 animating = 1;
             }
             LOGI("APP_CMD_INIT_WINDOW -2");
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
+#ifdef USE_GAME_RENDER
             //engine_term_display(engine);
-            // renderer->terminateDisplay();
+            renderer->terminateDisplay();
+#endif
             LOGI("APP_CMD_TERM_WINDOW");
             animating = 0;
             break;
@@ -107,9 +126,12 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
             // Also stop animating.
             LOGI("APP_CMD_LOST_FOCUS");
             animating = 0;
-            // renderer->draw();
+#ifdef USE_GAME_RENDER
+            renderer->draw();
+#endif
             break;
         default:
+            LOGI("APP_CMD %d", cmd);
             break;
     }
 }
@@ -126,8 +148,10 @@ void android_main(struct android_app* state) {
 
     LOGI("Running with SDK %d", state->activity->sdkVersion);
 
-    // std::unique_ptr<Renderer> renderer(new Renderer(1));
-    // state->userData = renderer.get();
+#ifdef USE_GAME_RENDER
+    std::unique_ptr<Renderer> renderer(new Renderer(1));
+    state->userData = renderer.get();
+#endif
     state->onAppCmd = engine_handle_cmd;
     state->onInputEvent = engine_handle_input;
 
@@ -140,21 +164,26 @@ void android_main(struct android_app* state) {
         // If not animating, we will block forever waiting for events.
         // If animating, we loop until all events are read, then continue
         // to draw the next frame of animation.
-        while (ALooper_pollAll(animating ? 0 : -1, NULL, &events, (void**)&source) >= 0) {
+        while (ALooper_pollAll(0, NULL, &events, (void**)&source) >= 0) {
+            LOGI("ALooper_pollAll -1");
             // Process this event.
             if (source != NULL) {
                 source->process(state, source);
             }
 
+            LOGI("ALooper_pollAll -2");
             // Check if we are exiting.
             if (state->destroyRequested != 0) {
-                // renderer->terminateDisplay();
+#ifdef USE_GAME_RENDER
+                renderer->terminateDisplay();
+#endif
                 LOGI("state->destroyRequested != 0, exit...");
                 return;
             }
+            LOGI("ALooper_pollAll -3");
         }
 
-        #if 0
+#ifdef USE_GAME_RENDER
         if (animating) {
             renderer->update();
 
@@ -163,20 +192,22 @@ void android_main(struct android_app* state) {
             renderer->draw();
 
             // Broadcast intent every 5 seconds.
-            static auto last_timestamp = std::chrono::steady_clock::now();
-            auto now = std::chrono::steady_clock::now();
-            if (now - last_timestamp >= std::chrono::seconds(5)) {
-                last_timestamp = now;
-                android::GameQualification qualification;
-                qualification.startLoop(state->activity);
-            }
+            // static auto last_timestamp = std::chrono::steady_clock::now();
+            // auto now = std::chrono::steady_clock::now();
+            // if (now - last_timestamp >= std::chrono::seconds(5)) {
+            //     last_timestamp = now;
+            //     android::GameQualification qualification;
+            //     qualification.startLoop(state->activity);
+            // }
         }
-        #endif
-        
+#else
+    #ifndef VDPY_SEPERATE_THREAD
         if (virtio_gpu_info.vdev_inited) {
             LOGI("vdpy_sdl_display_proc -0");
             vdpy_sdl_display_proc(virtio_gpu_info.vdev_termed);
             LOGI("vdpy_sdl_display_proc -1");
         }
+    #endif
+#endif
     }
 }

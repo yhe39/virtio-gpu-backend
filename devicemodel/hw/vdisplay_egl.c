@@ -642,7 +642,7 @@ sdl_gl_display_init(void)
 	int i;
 
 	/* obtain the eglDisplay/eglContext */
-	vdpy.eglDisplay = eglGetCurrentDisplay();
+	// vdpy.eglDisplay = eglGetCurrentDisplay();
 
 	/* Try to use the eglGetProcaddress to obtain callback API for
 	 * eglCreateImageKHR/eglDestroyImageKHR
@@ -686,6 +686,7 @@ static int egl_render_copy(GLuint src_tex,
 	gl_ops->glGenVertexArraysOES(1, &vao);
 	gl_ops->glBindVertexArrayOES(vao);
 
+	pr_info("%s -2\n", __func__);
 	// Create a VBO.
 	GLuint vbo;
 	glGenBuffers(1, &vbo);
@@ -698,19 +699,21 @@ static int egl_render_copy(GLuint src_tex,
 	1.0f, 1.0f, 1.0f, 1.0f,
 	0.0f, 1.0f, 0.0f, 1.0f
 	};
-	GLfloat vertices2[] = {
-	dstrect->x, dstrect->y, 0.0f, 0.0f,
-	dstrect->x + dstrect->w, dstrect->y, 1.0f, 0.0f,
-	dstrect->x + dstrect->w, dstrect->y + dstrect->h, 1.0f, 1.0f,
-	dstrect->x, dstrect->y + dstrect->h, 0.0f, 1.0f
-	};
+	if (dstrect) {
+		vertices[0] = dstrect->x;
+		vertices[1] = dstrect->y;
+		vertices[4] = dstrect->x + dstrect->w;
+		vertices[5] = dstrect->y;
+		vertices[8] = dstrect->x + dstrect->w;
+		vertices[9] = dstrect->y + dstrect->h;
+		vertices[12] = dstrect->x;
+		vertices[13] = dstrect->y + dstrect->h;
+	}
 
 	// Copy the vertex data to the VBO.
-	if (!dstrect)
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	else
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices2), vertices2, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+	pr_info("%s -3\n", __func__);
 	// Set the vertex attribute pointer.
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)0);
 	glEnableVertexAttribArray(0);
@@ -829,16 +832,18 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 	struct vscreen *vscr;
 
 	if (handle != vdpy.s.n_connect) {
+		pr_err("%s: invalid handle\n", __func__);
 		return;
 	}
 
-	if (vdpy.tid != pthread_self()) {
-		pr_err("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
-			__func__);
-		return;
-	}
+	// if (vdpy.tid != pthread_self()) {
+	// 	pr_err("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
+	// 		__func__);
+	// 	return;
+	// }
 
 	if (scanout_id >= vdpy.vscrs_num) {
+		pr_err("%s: invalid scanout id\n", __func__);
 		return;
 	}
 
@@ -1034,21 +1039,23 @@ vdpy_surface_update(int handle, int scanout_id, struct surface *surf)
 	struct vscreen *vscr;
 
 	if (handle != vdpy.s.n_connect) {
+		pr_err("%s: invalid handle\n", __func__);
 		return;
 	}
 
-	if (vdpy.tid != pthread_self()) {
-		pr_err("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
-			__func__);
-		return;
-	}
+	// if (vdpy.tid != pthread_self()) {
+	// 	pr_err("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
+	// 		__func__);
+	// 	return;
+	// }
 
 	if (!surf) {
 		pr_err("Incorrect order of submitting Virtio-GPU cmd.\n");
-	        return;
+		return;
 	}
 
 	if (scanout_id >= vdpy.vscrs_num) {
+		pr_err("%s: invalid scanout id\n", __func__);
 		return;
 	}
 
@@ -1093,21 +1100,25 @@ vdpy_cursor_define(int handle, int scanout_id, struct cursor *cur)
 	SDL_Rect rt = {0, 0, cur->width, cur->height};
 
 	if (handle != vdpy.s.n_connect) {
+		pr_err("%s: invalid handle\n", __func__);
 		return;
 	}
 
-	if (vdpy.tid != pthread_self()) {
-		pr_err("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
-			__func__);
-		return;
-	}
+	// if (vdpy.tid != pthread_self()) {
+	// 	pr_err("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
+	// 		__func__);
+	// 	return;
+	// }
 
 	if (scanout_id >= vdpy.vscrs_num) {
+		pr_err("%s: invalid scanout id", __func__);
 		return;
 	}
 
-	if (cur->data == NULL)
+	if (cur->data == NULL) {
+		pr_err("%s: invalid cursor data\n", __func__);
 		return;
+	}
 
 	vscr = vdpy.vscrs + scanout_id;
 
@@ -1303,7 +1314,8 @@ vdpy_create_vscreen_window(struct vscreen *vscr)
 	// SDL_SetTextureColorMod(vscr->bogus_tex, 0x80, 0x80, 0x80);
 	return 0;
 }
-#if 0
+
+#ifdef VDPY_SEPERATE_THREAD
 static void *
 vdpy_sdl_display_thread(void *data __attribute__((unused)))
 {
@@ -1432,7 +1444,7 @@ sdl_fail:
 	eglReleaseThread();
 	return NULL;
 }
-#endif
+#else
 void *
 vdpy_sdl_display_init()
 {
@@ -1567,7 +1579,7 @@ vdpy_sdl_display_proc(bool termed)
 {
 	struct vdpy_display_bh *bh;
 
-	if (!vdpy.s.is_active) {
+	if (!vdpy.s.is_active || vdpy.s.is_termed) {
 		pr_info("display is exiting\n");
 		return NULL;
 	}
@@ -1606,7 +1618,7 @@ vdpy_sdl_display_proc(bool termed)
 
 	return NULL;
 }
-
+#endif
 bool vdpy_submit_bh(int handle, struct vdpy_display_bh *bh_task)
 {
 	bool bh_ok = false;
@@ -1637,8 +1649,9 @@ bool vdpy_submit_bh(int handle, struct vdpy_display_bh *bh_task)
 int
 vdpy_init(int *num_vscreens __attribute__((unused)))
 {
-	// int err, count;
-#if 0
+#ifdef VDPY_SEPERATE_THREAD
+	int err, count;
+
 	if (vdpy.s.n_connect) {
 		return 0;
 	}
@@ -1670,17 +1683,18 @@ vdpy_init(int *num_vscreens __attribute__((unused)))
 	if (num_vscreens)
 		*num_vscreens = vdpy.vscrs_num;
 	return vdpy.s.n_connect;
-#endif
+#else
 	*num_vscreens = 1;
 	vdpy.s.n_connect = 1;
 	vdpy_sdl_display_init();
 	return vdpy.s.n_connect;
+#endif
 }
 
 int
 vdpy_deinit(int handle __attribute__((unused)))
 {
-	#if 0
+#ifdef VDPY_SEPERATE_THREAD
 	if (handle != vdpy.s.n_connect) {
 		return -1;
 	}
@@ -1699,8 +1713,9 @@ vdpy_deinit(int handle __attribute__((unused)))
 
 	pthread_join(vdpy.tid, NULL);
 	pr_info("Exit SDL display thread\n");
-	#endif
 
+#else
+	// wait for vdpy_sdl_display_proc got term signal
 	while (!vdpy.s.is_termed) {
 		usleep(10000);
 	}
@@ -1709,6 +1724,8 @@ vdpy_deinit(int handle __attribute__((unused)))
 	vdpy.s.n_connect--;
 	vdpy_sdl_display_term();
 	pr_info("Exit SDL display thread\n");
+#endif
+
 	return 0;
 }
 
@@ -1801,7 +1818,7 @@ gfx_ui_deinit()
 
 // 1, hardcode vdisplay/vscreen number to 1
 // 2, init egl context
-// called in 'hook_before_init', before 'vos_backend_init'
+// called far before in 'hook_before_init', before 'vos_backend_init'
 int
 vdpy_gfx_ui_init(void *data)
 {
@@ -1824,9 +1841,11 @@ vdpy_gfx_ui_init(void *data)
 	vscr->is_fullscreen = true;
 	vscr->pscreen_id = 0;
 
+	// create egl surface from native window
 	// SDL_GetDisplayBounds(vscr->pscreen_id, &vscr->pscreen_rect);
 	vdpy.eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 	if (eglInitialize(vdpy.eglDisplay, &majorVersion, &minorVersion) != EGL_TRUE) {
+		pr_err("%s, eglInitialize failed.", __func__);
 		return -1;
 	}
 
@@ -1840,6 +1859,7 @@ vdpy_gfx_ui_init(void *data)
             EGL_NONE };
 	eglChooseConfig(vdpy.eglDisplay, s_configAttribs, 0, 0, &numConfigs);
     if (numConfigs <= 0) {
+		pr_err("%s, eglChooseConfig failed.", __func__);
 		return -1;
     }
 
@@ -1954,7 +1974,7 @@ int vdpy_parse_cmd_option(const char *opts)
 		}
 
 		if (vdpy.vscrs_num > VSCREEN_MAX_NUM) {
-			pr_err("%d virtual displays are too many that acrn-dm can't support!\n");
+			pr_err("%d virtual displays are too many that acrn-dm can't support!\n", vdpy.vscrs_num);
 			break;
 		}
 	}

@@ -12,6 +12,7 @@
 #include <inout.h>
 #include <mem.h>
 #include <virtio.h>
+#include <log.h>
 
 int monitor_register_vm_ops(struct monitor_vm_ops *ops __attribute__((unused)), void *arg __attribute__((unused)), const char *name __attribute__((unused)))
 {

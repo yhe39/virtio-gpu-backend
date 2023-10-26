@@ -8,6 +8,7 @@
 
 #include "utils.h"
 #include "virtio_over_shmem.h"
+#include "log.h"
 
 static const char short_options[] = "d:h";
 
@@ -129,7 +130,7 @@ void parse_shmem_args(struct virtio_backend_info *info, int argc, char *argv[])
 
 void set_shmem_args(struct virtio_backend_info *info)
 {
-	info->shmem_devpath = "/dev/ivshm";
+	info->shmem_devpath = "/dev/ivshm0.default";
 	if (!info->shmem_ops && (infer_shmem_ops(info) < 0)) {
 		fprintf(stderr, "Failed to infer the shared memory driver. Specify one with -d.\n");
 		exit(EXIT_FAILURE);
@@ -147,29 +148,39 @@ void *run_backend(void *data)
 	int ret;
 	struct virtio_backend_info *info = (struct virtio_backend_info *)data;
 
+	pr_info	("%s() -1.\n", __func__);
+
 	// parse_shmem_args(info, argc, argv);
 	set_shmem_args(info);
 
+	pr_info	("%s() -2.\n", __func__);
 	if (info->hook_before_init)
 		info->hook_before_init(info);
 
+	pr_info	("%s() -3.\n", __func__);
 	ret = vos_backend_init(info);
 	if (ret)
 		error(1, ret, "Backend initialization failed.\n");
 
+	pr_info	("%s() -4.\n", __func__);
 	vos_backend_run();
 
+	pr_info	("%s() -5.\n", __func__);
 	vos_backend_deinit(info);
+	pr_info	("%s() -6.\n", __func__);
 	return NULL;
 }
 
 int create_backend_thread(struct virtio_backend_info *info)
 {
+	pr_info	("start create_backend_thread.\n");
 	if (pthread_create(&info->tid, NULL, run_backend, (void *)info)) {
 		pr_err("Failed to create the create_backend_thread.\n");
 		return -1;
 	}
+	pr_info	("start create_backend_thread -1.\n");
 	pthread_setname_np(info->tid, "acrn_gpu_backend");
+	pr_info	("start create_backend_thread -2.\n");
 	return 0;
 }
 
