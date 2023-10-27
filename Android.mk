@@ -20,7 +20,7 @@ LOCAL_SDK_VERSION := 26  # Oreo
 LOCAL_PACKAGE_NAME := VirtioGpuBackendApp
 LOCAL_MODULE_TAGS := optional
 #LOCAL_MODULE_PATH := $(TARGET_OUT_DATA_APPS)
-LOCAL_JNI_SHARED_LIBRARIES := libagq libacrn_virtio_gpu
+LOCAL_JNI_SHARED_LIBRARIES := libacrn_virtio_gpu
 LOCAL_NDK_STL_VARIANT := c++_shared
 LOCAL_CERTIFICATE  := platform
 

@@ -52,4 +52,7 @@ void output_log(uint8_t level, const char *fmt, ...);
 #define pr_info(...) output_log(LOG_INFO, pr_prefix __VA_ARGS__)
 #define pr_dbg(...) output_log(LOG_DEBUG, pr_prefix __VA_ARGS__)
 
+#undef error
+#define error(x, y, ...) output_log(LOG_ERROR, pr_prefix __VA_ARGS__)
+
 #endif /* __LOG_H__ */

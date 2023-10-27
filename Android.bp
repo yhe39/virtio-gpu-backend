@@ -75,12 +75,17 @@ cc_library_shared {
 	"devicemodel/hw/pci/virtio/vhost.c",
 	"devicemodel/hw/pci/virtio/virtio_gpu.c",
     "devicemodel/hw/vdisplay_egl.c",
+        "game/circle.cpp",
+        "game/common.cpp",
+        "game/renderer.cpp",
+        "game/shader.cpp",
+        "game/vecmath.cpp",
     ],
 
     local_include_dirs: [
         "devicemodel/include/public",
         "misc/library/include",
-	"devicemodel/include",
+        "devicemodel/include",
     ],
 
     stl: "libc++_static",
@@ -88,6 +93,7 @@ cc_library_shared {
         "-pthread",
         "-Wall",
         "-D__USE_BSD",
+        "-DANDROID",
     ],
     cppflags: ["-std=c++14"],
 
@@ -98,7 +104,6 @@ cc_library_shared {
         "libz",
         "libsync",
         "libc",
-        "libagq",
         "libandroid",
     ],
 

@@ -1,5 +1,5 @@
 #include <errno.h>
-#include <error.h>
+// #include <error.h>
 #include <string.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -10,6 +10,7 @@
 
 #include "shmem.h"
 #include "io.h"
+#include "log.h"
 #include "utils.h"
 
 #define MAX_VECTORS 8
@@ -39,6 +40,7 @@ static int shmem_open(const char *devpath, struct shmem_info *info, int evt_fds[
 	int i;
 	char *idx;
 
+	pr_info("%s -1\n", __func__);
 	memset(info, 0, sizeof(*info));
 
 	idx = strstr(devpath, ".");
@@ -47,18 +49,22 @@ static int shmem_open(const char *devpath, struct shmem_info *info, int evt_fds[
 	memcpy(ivshm_path, devpath, idx - devpath);
 	ivshm_path[idx - devpath] = '\0';
 
+	pr_info("%s -2 %s\n", __func__, ivshm_path);
 	ivshm_fd = open(ivshm_path, O_RDWR);
 	if (ivshm_fd < 0)
 		error(1, errno, "cannot open %s", devpath);
 
+	pr_info("%s -3 %s\n", __func__, devpath);
 	iregion_fd = open(devpath, O_RDWR);
 	if (iregion_fd < 0)
 		error(1, errno, "cannot open %s", devpath);
 
+	pr_info("%s -4 %d\n", __func__, ivshm_fd);
 	info->mmio_base = mmap(NULL, IVSHMEM_BAR0_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, ivshm_fd, 0);
 	if (info->mmio_base == MAP_FAILED)
 		error(1, errno, "mmap of registers failed");
 
+	pr_info("%s -5\n", __func__);
 	info->mem_size = 4 * 1024 * 1024;
 	info->mem_base = mmap(NULL, info->mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, iregion_fd, 0);
 	if (info->mem_base == MAP_FAILED)
@@ -78,6 +84,7 @@ static int shmem_open(const char *devpath, struct shmem_info *info, int evt_fds[
 	info->this_id = mmio_read32(&regs->ivpos);
 	info->peer_id = -1;
 
+	pr_info("%s -6\n", __func__);
 	close(ivshm_fd);
 
 	info->ops = &ivshm_ivshmem_ops;
