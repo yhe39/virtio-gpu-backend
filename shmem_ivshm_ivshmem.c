@@ -23,6 +23,7 @@ struct ivshm_listener_data {
 };
 
 #define IVSHM_ADD_LISTENER	_IOW('u', 100, struct ivshm_listener_data)
+#define IVSHM_GET_MMIO_SZ	_IOR('u', 101, unsigned long long)
 
 struct ivshm_regs {
 	uint32_t int_mask;
@@ -65,7 +66,10 @@ static int shmem_open(const char *devpath, struct shmem_info *info, int evt_fds[
 		error(1, errno, "mmap of registers failed");
 
 	pr_info("%s -5\n", __func__);
-	info->mem_size = 4 * 1024 * 1024;
+	if (ioctl(iregion_fd, IVSHM_GET_MMIO_SZ, &info->mem_size) < 0)
+		error(1, errno, "failed to get ivshm mmio size");
+
+	printf("%s, mem_size: 0x%lx___\r\n", __func__, info->mem_size);
 	info->mem_base = mmap(NULL, info->mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, iregion_fd, 0);
 	if (info->mem_base == MAP_FAILED)
 		error(1, errno, "mmap of shared memory failed");
