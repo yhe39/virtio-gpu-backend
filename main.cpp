@@ -27,12 +27,6 @@ extern "C" {
 #include <vdisplay.h>
 }
 
-// #define USE_GAME_RENDER
-
-#ifdef USE_GAME_RENDER
-#include "game/renderer.h"
-#endif
-
 #include <cassert>
 #include <chrono>
 #include <cinttypes>
@@ -52,10 +46,6 @@ extern "C" {
 #include <android_native_app_glue.h>
 
 
-#ifdef USE_GAME_RENDER
-using namespace std::chrono_literals;
-using namespace android::gamecore;
-#else
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "main", __VA_ARGS__))
 
 static void init_vdpy(struct virtio_backend_info *info) {
@@ -67,7 +57,6 @@ static struct virtio_backend_info virtio_gpu_info = {
 	.pci_vdev_ops = &pci_ops_virtio_gpu,
 	.hook_before_init = init_vdpy,
 };
-#endif
 
 namespace {
 int animating = 0;
@@ -87,11 +76,6 @@ int32_t engine_handle_input(struct android_app*, AInputEvent* event) {
  * Process the next main command.
  */
 void engine_handle_cmd(struct android_app* app, int32_t cmd) {
-#ifdef USE_GAME_RENDER
-    //struct engine* engine = (struct engine*)app->userData;
-    Renderer* renderer = reinterpret_cast<Renderer*>(app->userData);
-#endif
-
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
             // We are not saving the state.
@@ -101,24 +85,17 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
             // The window is being shown, get it ready.
             LOGI("APP_CMD_INIT_WINDOW");
             if (app->window != NULL) {
-            LOGI("APP_CMD_INIT_WINDOW -1");
-#ifdef USE_GAME_RENDER
-                renderer->initDisplay(app->window);
-                renderer->draw();
-#else
+                LOGI("APP_CMD_INIT_WINDOW -1");
                 virtio_gpu_info.native_window = app->window;
                 create_backend_thread(&virtio_gpu_info);
-#endif
+
                 animating = 1;
             }
             LOGI("APP_CMD_INIT_WINDOW -2");
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
-#ifdef USE_GAME_RENDER
-            //engine_term_display(engine);
-            renderer->terminateDisplay();
-#endif
+            close_backend_thread();
             LOGI("APP_CMD_TERM_WINDOW");
             animating = 0;
             break;
@@ -148,10 +125,6 @@ void android_main(struct android_app* state) {
 
     LOGI("Running with SDK %d", state->activity->sdkVersion);
 
-#ifdef USE_GAME_RENDER
-    std::unique_ptr<Renderer> renderer(new Renderer(1));
-    state->userData = renderer.get();
-#endif
     state->onAppCmd = engine_handle_cmd;
     state->onInputEvent = engine_handle_input;
 
@@ -174,9 +147,7 @@ void android_main(struct android_app* state) {
             LOGI("ALooper_pollAll -2");
             // Check if we are exiting.
             if (state->destroyRequested != 0) {
-#ifdef USE_GAME_RENDER
-                renderer->terminateDisplay();
-#endif
+                close_backend_thread();
                 LOGI("state->destroyRequested != 0, exit...");
                 return;
             }
@@ -203,9 +174,7 @@ void android_main(struct android_app* state) {
 #else
     #ifndef VDPY_SEPERATE_THREAD
         if (virtio_gpu_info.vdev_inited) {
-            LOGI("vdpy_sdl_display_proc -0");
             vdpy_sdl_display_proc(virtio_gpu_info.vdev_termed);
-            LOGI("vdpy_sdl_display_proc -1");
         }
     #endif
 #endif

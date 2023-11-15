@@ -184,6 +184,11 @@ int create_backend_thread(struct virtio_backend_info *info)
 	return 0;
 }
 
+void close_backend_thread()
+{
+	//vm_set_suspend_mode(VM_SUSPEND_NONE);
+}
+
 void dump_hex(void *base, int size)
 {
 	int i;

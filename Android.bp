@@ -75,11 +75,6 @@ cc_library_shared {
 	"devicemodel/hw/pci/virtio/vhost.c",
 	"devicemodel/hw/pci/virtio/virtio_gpu.c",
     "devicemodel/hw/vdisplay_egl.c",
-        "game/circle.cpp",
-        "game/common.cpp",
-        "game/renderer.cpp",
-        "game/shader.cpp",
-        "game/vecmath.cpp",
     ],
 
     local_include_dirs: [
@@ -94,12 +89,13 @@ cc_library_shared {
         "-Wall",
         "-D__USE_BSD",
         "-DANDROID",
+        "-DVDPY_SEPERATE_THREAD"
     ],
     cppflags: ["-std=c++14"],
 
     shared_libs: [
         "libEGL",
-        "libGLESv2",
+        "libGLESv3",
         "liblog",
         "libz",
         "libsync",

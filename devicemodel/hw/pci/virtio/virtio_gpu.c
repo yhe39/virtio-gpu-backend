@@ -716,6 +716,9 @@ virtio_gpu_cmd_resource_create_2d(struct virtio_gpu_command *cmd)
 	memcpy(&req, cmd->iov[0].iov_base, sizeof(req));
 	memset(&resp, 0, sizeof(resp));
 
+	pr_dbg("%s: resource_id=%d format=0x%x width=%d height=%d \n",
+			__func__, req.resource_id, req.format, req.width, req.height);
+
 	r2d = virtio_gpu_find_resource_2d(cmd->gpu, req.resource_id);
 	if (r2d) {
 		pr_dbg("%s: resource %d already exists.\n",
@@ -944,6 +947,9 @@ virtio_gpu_cmd_set_scanout(struct virtio_gpu_command *cmd)
 		surf.surf_format = r2d->format;
 		surf.surf_type = SURFACE_PIXMAN;
 		surf.pixel = (char*)surf.pixel + bytes_pp * surf.x + surf.y * surf.stride;
+		pr_dbg("%s: x/y/w/h=%d/%d/%d/%d stride=%d bytes_pp=%d format=0x%x pixel=0x%x\n",
+				__func__, req.r.x, req.r.y,req.r.width,req.r.height, surf.stride, bytes_pp,
+				r2d->format, surf.pixel);
 		vdpy_surface_set(gpu->vdpy_handle, req.scanout_id, &surf);
 		pixman_image_unref(r2d->image);
 		resp.type = VIRTIO_GPU_RESP_OK_NODATA;
@@ -1004,6 +1010,8 @@ virtio_gpu_cmd_transfer_to_host_2d(struct virtio_gpu_command *cmd)
 		img_data = pixman_image_get_data(r2d->image);
 		width = (req.r.width < r2d->width) ? req.r.width : r2d->width;
 		height = (req.r.height < r2d->height) ? req.r.height : r2d->height;
+		pr_dbg("%s: height=%d r2d->iovcnt=%d\n", __func__,
+				height, r2d->iovcnt);
 		for (h = 0; h < height; h++) {
 			src_offset = req.offset + stride * h;
 			dst_offset = (req.r.y + h) * stride + (req.r.x * bpp);
@@ -1012,6 +1020,7 @@ virtio_gpu_cmd_transfer_to_host_2d(struct virtio_gpu_command *cmd)
 			total = width * bpp;
 			for (i = 0; i < r2d->iovcnt; i++) {
 				if ((r2d->iov[i].iov_base == 0) || (r2d->iov[i].iov_len == 0)) {
+					pr_err("%s: (r2d->iov[i].iov_base == 0) || (r2d->iov[i].iov_len == 0)\n", __func__);
 					continue;
 				}
 
@@ -1020,6 +1029,7 @@ virtio_gpu_cmd_transfer_to_host_2d(struct virtio_gpu_command *cmd)
 					bytes = ((total - done) < (r2d->iov[i].iov_len - src_offset)) ?
 						 (total - done) : (r2d->iov[i].iov_len - src_offset);
 					memcpy(((char*)dst + done), src, bytes);
+
 					src_offset = 0;
 					done += bytes;
 					if (done >= total) {
@@ -1095,6 +1105,7 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 	memset(&resp, 0, sizeof(resp));
 	virtio_gpu_update_resp_fence(&cmd->hdr, &resp);
 
+	pr_err("%s\n", __func__);
 	r2d = virtio_gpu_find_resource_2d(gpu, req.resource_id);
 	if (r2d == NULL) {
 		pr_err("%s: Illegal resource id %d\n", __func__,
@@ -1490,33 +1501,43 @@ virtio_gpu_ctrl_bh(void *data)
 
 		switch (cmd.hdr.type) {
 		case VIRTIO_GPU_CMD_GET_EDID:
+			pr_dbg("%s VIRTIO_GPU_CMD_GET_EDID\n", __func__);
 			virtio_gpu_cmd_get_edid(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_GET_DISPLAY_INFO:
+			pr_dbg("%s VIRTIO_GPU_CMD_GET_DISPLAY_INFO\n", __func__);
 			virtio_gpu_cmd_get_display_info(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_CREATE_2D:
+			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_CREATE_2D\n", __func__);
 			virtio_gpu_cmd_resource_create_2d(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_UNREF:
+			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_UNREF\n", __func__);
 			virtio_gpu_cmd_resource_unref(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING:
+			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING\n", __func__);
 			virtio_gpu_cmd_resource_attach_backing(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING:
+			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING\n", __func__);
 			virtio_gpu_cmd_resource_detach_backing(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_SET_SCANOUT:
+			pr_dbg("%s VIRTIO_GPU_CMD_SET_SCANOUT\n", __func__);
 			virtio_gpu_cmd_set_scanout(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D:
+			pr_dbg("%s VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D\n", __func__);
 			virtio_gpu_cmd_transfer_to_host_2d(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_FLUSH:
+			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_FLUSH\n", __func__);
 			virtio_gpu_cmd_resource_flush(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB:
+			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB\n", __func__);
 			if (!virtio_gpu_blob_supported(vdev)) {
 				virtio_gpu_cmd_unspec(&cmd);
 				break;
@@ -1524,6 +1545,7 @@ virtio_gpu_ctrl_bh(void *data)
 			virtio_gpu_cmd_create_blob(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_SET_SCANOUT_BLOB:
+			pr_dbg("%s VIRTIO_GPU_CMD_SET_SCANOUT_BLOB\n", __func__);
 			if (!virtio_gpu_blob_supported(vdev)) {
 				virtio_gpu_cmd_unspec(&cmd);
 				break;
@@ -1531,9 +1553,11 @@ virtio_gpu_ctrl_bh(void *data)
 			virtio_gpu_cmd_set_scanout_blob(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_SET_MODIFIER:
+			pr_dbg("%s VIRTIO_GPU_CMD_SET_MODIFIER\n", __func__);
 			virtio_gpu_cmd_set_modifier(&cmd);
 			break;
 		default:
+			pr_dbg("%s unknown type %d\n", __func__, cmd.hdr.type);
 			virtio_gpu_cmd_unspec(&cmd);
 			break;
 		}
@@ -1687,7 +1711,7 @@ virtio_gpu_vga_render(void *param)
 		   gpu->vga.gc->gc_image->height != gpu->vga.vberegs.yres) {
 			gc_resize(gpu->vga.gc, gpu->vga.vberegs.xres, gpu->vga.vberegs.yres);
 		}
-		vdpy_submit_bh(gpu->vdpy_handle, &gpu->vga_bh);
+		// vdpy_submit_bh(gpu->vdpy_handle, &gpu->vga_bh);
 		usleep(33000);
 	}
 
@@ -1845,6 +1869,7 @@ virtio_gpu_init(struct vmctx *ctx, struct pci_vdev *dev, char *opts __attribute_
 	/* EDID data blob [0x000~0x3ff] */
 	vdpy_get_edid(gpu->vdpy_handle, 0, gpu->edid, VIRTIO_GPU_EDID_SIZE);
 	/* VGA ioports regs [0x400~0x41f] */
+	pr_dbg("%s vga w/h=%d/%d fb_base=0x%x\n", __func__, info.width, info.height, ctx->fb_base);
 	gpu->vga.gc = gc_init(info.width, info.height, ctx->fb_base);
 	gpu->vga.dev = vga_init(gpu->vga.gc, 0);
 	if (gpu->vga.dev == NULL) {
