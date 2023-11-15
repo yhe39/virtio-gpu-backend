@@ -22,6 +22,26 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
+
+#define checkGlError(op) { \
+	pr_err("%s():%d   CALL %s()\n", __func__, __LINE__, op); \
+	for (GLint error = glGetError(); error; error = glGetError()) { \
+		pr_err("%s():%d   glError (0x%x) for %s()\n", __func__, __LINE__, error, op); \
+	} \
+}
+#define checkGlError2(op, arg) { \
+	pr_err("%s():%d   CALL %s() 0x%x\n", __func__, __LINE__, op, arg); \
+	for (GLint error = glGetError(); error; error = glGetError()) { \
+		pr_err("%s():%d   glError (0x%x) for %s()\n", __func__, __LINE__, error, op); \
+	} \
+}
+#define checkEglError(op) { \
+	pr_err("%s():%d   CALL %s()\n", __func__, __LINE__, op); \
+	for (GLint error = eglGetError(); error!=EGL_SUCCESS; error = eglGetError()) { \
+		pr_err("%s():%d   eglError (0x%x) for %s()\n", __func__, __LINE__, error, op); \
+	} \
+}
+
 #define VDPY_MAX_WIDTH 3840
 #define VDPY_MAX_HEIGHT 2160
 #define VDPY_DEFAULT_WIDTH 1024
@@ -50,9 +70,6 @@ struct egl_display_ops {
 	PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
 	PFNEGLDESTROYIMAGEKHRPROC eglDestroyImageKHR;
 	PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
-	PFNGLGENVERTEXARRAYSOESPROC glGenVertexArraysOES;
-	PFNGLBINDVERTEXARRAYOESPROC glBindVertexArrayOES;
-	PFNGLDELETEVERTEXARRAYSOESPROC glDeleteVertexArraysOES;
 };
 
 typedef struct{
@@ -104,8 +121,12 @@ static struct display {
 	// SDL_GLContext eglContext;
 	EGLContext eglContext;
 	EGLDisplay eglDisplay;
-    EGLSurface eglSurface;
+	EGLSurface eglSurface;
 	struct egl_display_ops gl_ops;
+
+	// Handle to a program object
+	GLuint programObject;
+	GLuint programObjectExternal;
 } vdpy = {
 	.s.is_ui_realized = false,
 	.s.is_active = false,
@@ -113,13 +134,13 @@ static struct display {
 	.s.is_x11 = false,
 	.s.n_connect = 0,
 	.eglDisplay = EGL_NO_DISPLAY,
-    .eglContext = EGL_NO_CONTEXT,    
+	.eglContext = EGL_NO_CONTEXT,
 	.eglSurface = EGL_NO_SURFACE
 };
 
 typedef enum {
 	ESTT = 1, // Established Timings I & II
-	STDT,    // Standard Timings
+	STDT,	// Standard Timings
 	ESTT3,   // Established Timings III
 	CEA861,	// CEA-861 Timings
 } TIMING_MODE;
@@ -130,7 +151,7 @@ static const struct timing_entry {
 	uint32_t byte;  // byte idx in the Established Timings I & II
 	uint32_t byte_t3;// byte idx in the Established Timings III Descriptor
 	uint32_t bit;   // bit idx
-	uint8_t hz;     // frequency
+	uint8_t hz;	 // frequency
 	bool	is_std; // the flag of standard mode
 	bool	is_cea861; // CEA-861 timings
 	uint8_t vic;	// Video Indentification Code
@@ -154,37 +175,37 @@ static const struct timing_entry {
 };
 
 typedef struct frame_param{
-	uint32_t hav_pixel;     // Horizontal Addressable Video in pixels
-	uint32_t hb_pixel;      // Horizontal Blanking in pixels
-	uint32_t hfp_pixel;     // Horizontal Front Porch in pixels
-	uint32_t hsp_pixel;     // Horizontal Sync Pulse Width in pixels
-	uint32_t lhb_pixel;     // Left Horizontal Border or Right Horizontal
-	                        // Border in pixels
+	uint32_t hav_pixel;	 // Horizontal Addressable Video in pixels
+	uint32_t hb_pixel;	  // Horizontal Blanking in pixels
+	uint32_t hfp_pixel;	 // Horizontal Front Porch in pixels
+	uint32_t hsp_pixel;	 // Horizontal Sync Pulse Width in pixels
+	uint32_t lhb_pixel;	 // Left Horizontal Border or Right Horizontal
+							// Border in pixels
 
-	uint32_t vav_line;      // Vertical Addressable Video in lines
-	uint32_t vb_line;       // Vertical Blanking in lines
-	uint32_t vfp_line;      // Vertical Front Porch in Lines
-	uint32_t vsp_line;      // Vertical Sync Pulse Width in Lines
-	uint32_t tvb_line;      // Top Vertical Border or Bottom Vertical
-	                        // Border in Lines
+	uint32_t vav_line;	  // Vertical Addressable Video in lines
+	uint32_t vb_line;	   // Vertical Blanking in lines
+	uint32_t vfp_line;	  // Vertical Front Porch in Lines
+	uint32_t vsp_line;	  // Vertical Sync Pulse Width in Lines
+	uint32_t tvb_line;	  // Top Vertical Border or Bottom Vertical
+							// Border in Lines
 
 	uint64_t pixel_clock;   // Hz
-	uint32_t width;         // mm
-	uint32_t height;        // mm
+	uint32_t width;		 // mm
+	uint32_t height;		// mm
 }frame_param;
 
 typedef struct base_param{
-	uint32_t h_pixel;       // pixels
-	uint32_t v_pixel;       // lines
-	uint32_t rate;          // Hz
-	uint32_t width;         // mm
-	uint32_t height;        // mm
+	uint32_t h_pixel;	   // pixels
+	uint32_t v_pixel;	   // lines
+	uint32_t rate;		  // Hz
+	uint32_t width;		 // mm
+	uint32_t height;		// mm
 
 	const char *id_manuf;   // ID Manufacturer Name, ISA 3-character ID Code
-	uint16_t id_product;    // ID Product Code
-	uint32_t id_sn;         // ID Serial Number and it is a number only.
+	uint16_t id_product;	// ID Product Code
+	uint32_t id_sn;		 // ID Serial Number and it is a number only.
 
-	const char *sn;         // Serial number.
+	const char *sn;		 // Serial number.
 	const char *product_name;// Product name.
 }base_param;
 
@@ -247,11 +268,11 @@ vdpy_edid_set_color(uint8_t *edid, float red_x, float red_y,
 	color[0] = ((rx & 0x03) << 6) |
 		   ((ry & 0x03) << 4) |
 		   ((gx & 0x03) << 2) |
-		    (gy & 0x03);
+			(gy & 0x03);
 	color[1] = ((bx & 0x03) << 6) |
 		   ((by & 0x03) << 4) |
 		   ((wx & 0x03) << 2) |
-		    (wy & 0x03);
+			(wy & 0x03);
 	color[2] = rx >> 2;
 	color[3] = ry >> 2;
 	color[4] = gx >> 2;
@@ -304,21 +325,21 @@ vdpy_edid_set_timing(uint8_t *addr, TIMING_MODE mode)
 			if(stdcnt < 8 && timing->is_std) {
 				hpixel = (timing->hpixel >> 3) - 31;
 				if (timing->hpixel == 0 ||
-				    timing->vpixel == 0) {
+					timing->vpixel == 0) {
 					AR = -1;
 				} else if (hpixel & 0xff00) {
 					AR = -2;
 				} else if (timing->hpixel * 10 ==
-				    timing->vpixel * 16) {
+					timing->vpixel * 16) {
 					AR = 0;
 				} else if (timing->hpixel * 3 ==
-				    timing->vpixel * 4) {
+					timing->vpixel * 4) {
 					AR = 1;
 				} else if (timing->hpixel * 4 ==
-				    timing->vpixel * 5) {
+					timing->vpixel * 5) {
 					AR = 2;
 				} else if (timing->hpixel * 9 ==
-				    timing->vpixel * 16) {
+					timing->vpixel * 16) {
 					AR = 3;
 				} else {
 					AR = -2;
@@ -489,8 +510,8 @@ vdpy_edid_generate(uint8_t *edid, size_t size, struct edid_info *info)
 	/* edid[17:8], Vendor & Product Identification */
 	// Manufacturer ID is a big-endian 16-bit value.
 	id_manuf = ((((b_param.id_manuf[0] - '@') & 0x1f) << 10) |
-		    (((b_param.id_manuf[1] - '@') & 0x1f) << 5) |
-		    (((b_param.id_manuf[2] - '@') & 0x1f) << 0));
+			(((b_param.id_manuf[1] - '@') & 0x1f) << 5) |
+			(((b_param.id_manuf[2] - '@') & 0x1f) << 0));
 	edid[8] = id_manuf >> 8;
 	edid[9] = id_manuf & 0xff;
 
@@ -502,7 +523,7 @@ vdpy_edid_generate(uint8_t *edid, size_t size, struct edid_info *info)
 	serial = b_param.id_sn;
 	memcpy(edid+12, &serial, sizeof(serial));
 
-	edid[16] = 0;           // Week of Manufacture
+	edid[16] = 0;		   // Week of Manufacture
 	edid[17] = 2018 - 1990; // Year of Manufacture or Model Year.
 				// Acrn is released in 2018.
 
@@ -654,12 +675,6 @@ sdl_gl_display_init(void)
 				eglGetProcAddress("eglDestroyImageKHR");
 	gl_ops->glEGLImageTargetTexture2DOES = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)
 				eglGetProcAddress("glEGLImageTargetTexture2DOES");
-	gl_ops->glGenVertexArraysOES = (PFNGLGENVERTEXARRAYSOESPROC)
-				eglGetProcAddress("glGenVertexArraysOES");
-	gl_ops->glBindVertexArrayOES = (PFNGLBINDVERTEXARRAYOESPROC)
-				eglGetProcAddress("glBindVertexArrayOES");
-	gl_ops->glDeleteVertexArraysOES = (PFNGLDELETEVERTEXARRAYSOESPROC)
-				eglGetProcAddress("glDeleteVertexArraysOES");
 
 	for (i = 0; i < vdpy.vscrs_num; i++) {
 		vscr = vdpy.vscrs + i;
@@ -678,107 +693,151 @@ sdl_gl_display_init(void)
 }
 
 static int egl_render_copy(GLuint src_tex,
-                   const SDL_Rect * dstrect)
+				   const SDL_Rect * dstrect  __attribute__((unused)), bool is_dmabuf)
 {
-	struct egl_display_ops *gl_ops = &vdpy.gl_ops;
-	// Create a VAO.
-	GLuint vao;
-	gl_ops->glGenVertexArraysOES(1, &vao);
-	gl_ops->glBindVertexArrayOES(vao);
-
-	pr_info("%s -2\n", __func__);
-	// Create a VBO.
-	GLuint vbo;
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-	// Set the vertex and texture coordinates for the rectangle.
-	GLfloat vertices[] = {
-	0.0f, 0.0f, 0.0f, 0.0f,
-	1.0f, 0.0f, 1.0f, 0.0f,
-	1.0f, 1.0f, 1.0f, 1.0f,
-	0.0f, 1.0f, 0.0f, 1.0f
+	GLfloat vVertices[] = {-1.0f, 1.0f, 0.0f,  // Position 0
+						   0.0f, 0.0f,		// TexCoord 0
+						   -1.0f, -1.0f, 0.0f,  // Position 1
+						   0.0f, 1.0f,		// TexCoord 1
+						   1.0f, -1.0f, 0.0f,  // Position 2
+						   1.0f, 1.0f,		// TexCoord 2
+						   1.0f, 1.0f, 0.0f,  // Position 3
+						   1.0f, 0.0f		 // TexCoord 3
 	};
+	GLushort indices[] = {0, 1, 2, 0, 2, 3};
+
 	if (dstrect) {
-		vertices[0] = dstrect->x;
-		vertices[1] = dstrect->y;
-		vertices[4] = dstrect->x + dstrect->w;
-		vertices[5] = dstrect->y;
-		vertices[8] = dstrect->x + dstrect->w;
-		vertices[9] = dstrect->y + dstrect->h;
-		vertices[12] = dstrect->x;
-		vertices[13] = dstrect->y + dstrect->h;
+		vVertices[0] = dstrect->x;
+		vVertices[1] = dstrect->y;
+		vVertices[5] = dstrect->x + dstrect->w;
+		vVertices[6] = dstrect->y;
+		vVertices[10] = dstrect->x + dstrect->w;
+		vVertices[11] = dstrect->y + dstrect->h;
+		vVertices[15] = dstrect->x;
+		vVertices[16] = dstrect->y + dstrect->h;
+		pr_info("%s dstrect={%d, %d, %d, %d}\n",
+				 __func__, dstrect->x, dstrect->y, dstrect->w, dstrect->h);
+	} else {
+		pr_info("%s dstrect=NULL\n", __func__);
 	}
 
-	// Copy the vertex data to the VBO.
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	// Set the viewport
+	struct vscreen *vscr = &vdpy.vscrs[0];
+	glViewport(0, 0, vscr->width, vscr->height);
+	checkGlError("glViewport");
 
-	pr_info("%s -3\n", __func__);
-	// Set the vertex attribute pointer.
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)0);
-	glEnableVertexAttribArray(0);
+	// Clear the color buffer
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	checkGlError("glClear");
 
-	// Set the texture attribute pointer.
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
-	glEnableVertexAttribArray(1);
+	// Use the program object
+	GLuint program;
+	if (is_dmabuf)
+		program = vdpy.programObjectExternal;
+	else
+		program = vdpy.programObject;
+	glLinkProgram(program);
+	glUseProgram(program);
+	checkGlError("glUseProgram");
 
-	// Unbind the VBO and VAO.
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	gl_ops->glBindVertexArrayOES(0);
+	// Load the vertex position
+	glVertexAttribPointer(0, 3, GL_FLOAT,
+						  GL_FALSE, 5 * sizeof(GLfloat), vVertices);
+	checkGlError("glVertexAttribPointer0");
+	// Load the texture coordinate
+	glVertexAttribPointer(1, 2, GL_FLOAT,
+						  GL_FALSE, 5 * sizeof(GLfloat), &vVertices[3]);
+	checkGlError("glVertexAttribPointer1");
 
-	// Bind the texture to the active texture unit.
-	glBindTexture(GL_TEXTURE_2D, src_tex);
+	glEnableVertexAttribArray(0);
+	checkGlError("glEnableVertexAttribArray0");
+	glEnableVertexAttribArray(1);
+	checkGlError("glEnableVertexAttribArray1");
 
-	// Bind the VAO.
-	gl_ops->glBindVertexArrayOES(vao);
+	// Bind the base map
+	glActiveTexture(GL_TEXTURE0);
+	checkGlError("glActiveTexture");
+	if (is_dmabuf)
+		glBindTexture(GL_TEXTURE_EXTERNAL_OES, src_tex);
+	else
+		glBindTexture(GL_TEXTURE_2D, src_tex);
+	checkGlError2("glBindTexture", src_tex);
 
-	// Draw the rectangle.
-	glDrawArrays(GL_TRIANGLES, 0, 4);
+	// Set the base map sampler to texture unit to 0
+	// glUniform1i(userData->baseMapLoc, 0);
+	GLuint uniformlocation = glGetUniformLocation(program, "uTexture");
+	checkGlError("glGetUniformLocation");
+	glUniform1i(uniformlocation, 0);
+	checkGlError("glUniform1i");
 
-	// Disable the vertex attribute arrays.
-	glDisableVertexAttribArray(0);
-	glDisableVertexAttribArray(1);
-
-	// Unbind the VAO.
-	gl_ops->glBindVertexArrayOES(0);
-	gl_ops->glDeleteVertexArraysOES(1, &vao);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
+	checkGlError("glDrawElements");
 	return 0;
 }
 
 // to Replace SDL_CreateTexture
 static int egl_create_tex(GLuint *texid, uint32_t format,
-                                int w, int h)
+								int w, int h)
 {
-    glGenTextures(1, texid);
-    glBindTexture(GL_TEXTURE_2D, *texid);
-    glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, format, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	pr_info("%s -1\n", __func__);
+	glGenTextures(1, texid);
+	checkGlError2("glGenTextures", *texid);
+	glBindTexture(GL_TEXTURE_2D, *texid);
+	checkGlError2("glBindTexture", *texid);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, format, GL_UNSIGNED_BYTE, NULL);
+	// glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	checkGlError("glTexImage2D");
+	pr_info("%s glTexImage2D w/h=%d/%d internalFormat/format=0x%x/0x%x\n", __func__,
+		w, h, GL_RGBA, format);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	checkGlError("glTexParameteri");
+	pr_info("%s -2\n", __func__);
 	return 0;
 }
 
 static int egl_create_dma_tex(GLuint *texid)
 {
-    glGenTextures(1, texid);
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, *texid);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	pr_info("%s -1\n", __func__);
+	glGenTextures(1, texid);
+	checkGlError2("glGenTextures", *texid);
+	glBindTexture(GL_TEXTURE_EXTERNAL_OES, *texid);
+	checkGlError2("glBindTexture", *texid);
+	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	checkGlError("glTexParameteri");
+	pr_info("%s -2\n", __func__);
 	return 0;
 }
 
 // to Replace SDL_UpdateTexture
 static int egl_update_tex(GLuint texid,
-                      const SDL_Rect * rect, int format,
-                      const void *pixels)
+					  const SDL_Rect * rect, int format,
+					  const void *pixels)
 {
+	pr_info("%s -1\n", __func__);
 	glBindTexture(GL_TEXTURE_2D, texid);
+	checkGlError2("glBindTexture", texid);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	pr_info("%s x/y/w/h=%d/%d/%d/%d format=0x%x pixels=0x%x\n", __func__,
+		rect->x, rect->y, rect->w, rect->h,
+		format, pixels);
+	// glTexSubImage2D(GL_TEXTURE_2D, 0,
+	// 				 rect->x, rect->y, rect->w, rect->h,
+	// 				 format, GL_UNSIGNED_BYTE, pixels);
 	glTexSubImage2D(GL_TEXTURE_2D, 0,
 					 rect->x, rect->y, rect->w, rect->h,
-					 format, GL_UNSIGNED_BYTE, pixels);
+					 GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+	checkGlError("glTexSubImage2D");
+	pr_info("%s -2\n", __func__);
 	return 0;
 }
 
@@ -803,10 +862,11 @@ static void sdl_gl_prepare_draw(struct vscreen *vscr)
 	 */
 	// SDL_RenderClear(vscr->renderer);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	checkGlError("glClear");
 
 	// SDL_RenderCopy(vscr->renderer, vscr->bogus_tex, NULL, &bogus_rect);
-	egl_render_copy(vscr->bogus_tex, &bogus_rect);
+	// egl_render_copy(vscr->bogus_tex, &bogus_rect, false);
 	return;
 }
 
@@ -846,6 +906,7 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 		pr_err("%s: invalid scanout id\n", __func__);
 		return;
 	}
+	pr_info("%s -1\n", __func__);
 
 	vscr = vdpy.vscrs + scanout_id;
 
@@ -887,6 +948,7 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 	if (vscr->surf_tex) {
 		// SDL_DestroyTexture(vscr->surf_tex);
 		glDeleteTextures(1, &vscr->surf_tex);
+		checkGlError2("glDeleteTextures", vscr->surf_tex);
 	}
 	if (surf && (surf->surf_type == SURFACE_DMABUF)) {
 		// access = SDL_TEXTUREACCESS_STATIC;
@@ -945,13 +1007,15 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 		// 		  pixman_image_get_stride(src_img));
 		SDL_Rect rt = {0, 0, vscr->guest_width, vscr->guest_height};
 		egl_update_tex(vscr->surf_tex,
-                      &rt, format,
-                      pixman_image_get_data(src_img));
+					  &rt, format,
+					  pixman_image_get_data(src_img));
 		sdl_gl_prepare_draw(vscr);
 		// SDL_RenderCopy(vscr->renderer, vscr->surf_tex, NULL, NULL);
-		egl_render_copy(vscr->surf_tex, NULL);
+		egl_render_copy(vscr->surf_tex, NULL, false);
 		// SDL_RenderPresent(vscr->renderer);
 		eglSwapBuffers(vdpy.eglDisplay, vdpy.eglSurface);
+		checkEglError("eglSwapBuffers");
+		pr_dbg("%s vdpy.eglSurface=0x%x\n", __func__, vdpy.eglSurface);
 	} else if (surf->surf_type == SURFACE_DMABUF) {
 		EGLImageKHR egl_img = EGL_NO_IMAGE_KHR;
 		EGLint attrs[64];
@@ -987,10 +1051,13 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 			pr_err("Failed in eglCreateImageKHR.\n");
 			return;
 		}
+		checkEglError("eglCreateImageKHR");
 
 		// SDL_GL_BindTexture(vscr->surf_tex, NULL, NULL);
-		glBindTexture(GL_TEXTURE_2D, vscr->surf_tex);
+		glBindTexture(GL_TEXTURE_EXTERNAL_OES, vscr->surf_tex);
+		checkGlError2("glBindTexture", vscr->surf_tex);
 		gl_ops->glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, egl_img);
+		checkGlError("glEGLImageTargetTexture2DOES");
 		if (vscr->egl_img != EGL_NO_IMAGE_KHR)
 			gl_ops->eglDestroyImageKHR(vdpy.eglDisplay,
 					vscr->egl_img);
@@ -1014,6 +1081,7 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 	// }
 	/* Replace the cur_img with the created_img */
 	vscr->img = src_img;
+	pr_info("%s -2\n", __func__);
 }
 
 void
@@ -1059,6 +1127,7 @@ vdpy_surface_update(int handle, int scanout_id, struct surface *surf)
 		return;
 	}
 
+	pr_info("%s -1\n", __func__);
 	vscr = vdpy.vscrs + scanout_id;
 	// if (surf->surf_type == SURFACE_PIXMAN)
 	// 	SDL_UpdateTexture(vscr->surf_tex, NULL,
@@ -1068,13 +1137,16 @@ vdpy_surface_update(int handle, int scanout_id, struct surface *surf)
 	if (surf->surf_type == SURFACE_PIXMAN) {
 		SDL_Rect rt = {0, 0, vscr->guest_width, vscr->guest_height};
 		egl_update_tex(vscr->surf_tex,
-                      &rt, vscr->surf_format,
-                      surf->pixel);
+					  &rt, vscr->surf_format,
+					  surf->pixel);
 	}
 
 	sdl_gl_prepare_draw(vscr);
 	// SDL_RenderCopy(vscr->renderer, vscr->surf_tex, NULL, NULL);
-	egl_render_copy(vscr->surf_tex, NULL);
+	if (surf->surf_type == SURFACE_PIXMAN)
+		egl_render_copy(vscr->surf_tex, NULL, false);
+	else
+		egl_render_copy(vscr->surf_tex, NULL, true);
 
 	/* This should be handled after rendering the surface_texture.
 	 * Otherwise it will be hidden
@@ -1083,14 +1155,17 @@ vdpy_surface_update(int handle, int scanout_id, struct surface *surf)
 		vdpy_cursor_position_transformation(&vdpy, scanout_id, &cursor_rect);
 		// SDL_RenderCopy(vscr->renderer, vscr->cur_tex,
 		// 		NULL, &cursor_rect);
-		egl_render_copy(vscr->cur_tex, &cursor_rect);
+		egl_render_copy(vscr->cur_tex, &cursor_rect, false);
 	}
 
 	// SDL_RenderPresent(vscr->renderer);
 	eglSwapBuffers(vdpy.eglDisplay, vdpy.eglSurface);
+	checkEglError("eglSwapBuffers");
+	pr_dbg("%s vdpy.eglSurface=0x%x\n", __func__, vdpy.eglSurface);
 
 	/* update the rendering time */
 	clock_gettime(CLOCK_MONOTONIC, &vscr->last_time);
+	pr_info("%s -2\n", __func__);
 }
 
 void
@@ -1120,11 +1195,14 @@ vdpy_cursor_define(int handle, int scanout_id, struct cursor *cur)
 		return;
 	}
 
+	pr_info("%s -1\n", __func__);
 	vscr = vdpy.vscrs + scanout_id;
 
-	if (vscr->cur_tex)
+	if (vscr->cur_tex) {
 		// SDL_DestroyTexture(vscr->cur_tex);
 		glDeleteTextures(1, &vscr->cur_tex);
+		checkGlError2("glDeleteTextures", vscr->cur_tex);
+	}
 
 	// vscr->cur_tex = SDL_CreateTexture(
 	// 		vscr->renderer,
@@ -1139,12 +1217,16 @@ vdpy_cursor_define(int handle, int scanout_id, struct cursor *cur)
 
 	// SDL_SetTextureBlendMode(vscr->cur_tex, SDL_BLENDMODE_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	checkGlError("glBlendFunc");
 	glEnable(GL_BLEND);
+	checkGlError("glEnable");
 
 	vscr->cur = *cur;
 	// SDL_UpdateTexture(vscr->cur_tex, NULL, cur->data, cur->width * 4);
 	egl_update_tex(vscr->cur_tex, &rt, GL_BGRA_EXT, cur->data);
 	glDisable(GL_BLEND);
+	checkGlError("glDisable");
+	pr_info("%s -2\n", __func__);
 }
 
 void
@@ -1160,12 +1242,14 @@ vdpy_cursor_move(int handle, int scanout_id, uint32_t x, uint32_t y)
 		return;
 	}
 
+	pr_info("%s -1\n", __func__);
 	vscr = vdpy.vscrs + scanout_id;
 	/* Only move the position of the cursor. The cursor_texture
 	 * will be handled in surface_update
 	 */
 	vscr->cur.x = x;
 	vscr->cur.y = y;
+	pr_info("%s -2\n", __func__);
 }
 
 static void
@@ -1178,6 +1262,7 @@ vdpy_sdl_ui_refresh(void *data)
 	struct vscreen *vscr;
 	int i;
 
+	// pr_info("%s -1\n", __func__);
 	ui_vdpy = (struct display *)data;
 
 	for (i = 0; i < vdpy.vscrs_num; i++) {
@@ -1198,7 +1283,11 @@ vdpy_sdl_ui_refresh(void *data)
 
 		sdl_gl_prepare_draw(vscr);
 		// SDL_RenderCopy(vscr->renderer, vscr->surf_tex, NULL, NULL);
-		egl_render_copy(vscr->surf_tex, NULL);
+		if ((vscr->surf.width == 0)
+			 || (vscr->surf.surf_type == SURFACE_PIXMAN))
+			egl_render_copy(vscr->surf_tex, NULL, false);
+		else
+			egl_render_copy(vscr->surf_tex, NULL, true);
 
 		/* This should be handled after rendering the surface_texture.
 		 * Otherwise it will be hidden
@@ -1207,12 +1296,15 @@ vdpy_sdl_ui_refresh(void *data)
 			vdpy_cursor_position_transformation(ui_vdpy, i, &cursor_rect);
 			// SDL_RenderCopy(vscr->renderer, vscr->cur_tex,
 			// 		NULL, &cursor_rect);
-			egl_render_copy(vscr->cur_tex, &cursor_rect);
+			egl_render_copy(vscr->cur_tex, &cursor_rect, false);
 		}
 
 		// SDL_RenderPresent(vscr->renderer);
 		eglSwapBuffers(vdpy.eglDisplay, vdpy.eglSurface);
+		checkEglError("eglSwapBuffers");
+		pr_dbg("%s vdpy.eglSurface=0x%x\n", __func__, vdpy.eglSurface);
 	}
+	// pr_info("%s -2\n", __func__);
 }
 
 static void
@@ -1270,8 +1362,8 @@ vdpy_create_vscreen_window(struct vscreen *vscr)
 	// uint32_t win_flags;
 
 	// win_flags = SDL_WINDOW_OPENGL |
-	// 	    	SDL_WINDOW_ALWAYS_ON_TOP |
-	// 	    	SDL_WINDOW_SHOWN;
+	// 			SDL_WINDOW_ALWAYS_ON_TOP |
+	// 			SDL_WINDOW_SHOWN;
 	// if (vscr->is_fullscreen) {
 	// 	// win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 	// 	vscr->org_x = vscr->pscreen_rect.x;
@@ -1319,11 +1411,19 @@ vdpy_create_vscreen_window(struct vscreen *vscr)
 static void *
 vdpy_sdl_display_thread(void *data __attribute__((unused)))
 {
+	static bool is_egl_current = false;
 	struct vdpy_display_bh *bh;
 	struct itimerspec ui_timer_spec;
 
 	struct vscreen *vscr;
 	int i;
+
+	if (!is_egl_current) {
+		pr_info("vdpy_sdl_display_proc() eglMakeCurrent\n");
+		eglMakeCurrent(vdpy.eglDisplay, vdpy.eglSurface, vdpy.eglSurface, vdpy.eglContext);
+		checkEglError("eglMakeCurrent");
+		is_egl_current = true;
+	}
 
 	for (i = 0; i < vdpy.vscrs_num; i++) {
 		vscr = vdpy.vscrs + i;
@@ -1407,11 +1507,13 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 		if (vscr->surf_tex) {
 			// SDL_DestroyTexture(vscr->surf_tex);
 			glDeleteTextures(1, &vscr->surf_tex);
+			checkGlError2("glDeleteTextures", vscr->surf_tex);
 			vscr->surf_tex = 0;
 		}
 		if (vscr->cur_tex) {
 			// SDL_DestroyTexture(vscr->cur_tex);
 			glDeleteTextures(1, &vscr->cur_tex);
+			checkGlError2("glDeleteTextures", vscr->cur_tex);
 			vscr->cur_tex = 0;
 		}
 
@@ -1426,6 +1528,7 @@ sdl_fail:
 		if (vscr->bogus_tex) {
 			// SDL_DestroyTexture(vscr->bogus_tex);
 			glDeleteTextures(1, &vscr->bogus_tex);
+			checkGlError2("glDeleteTextures", vscr->bogus_tex);
 			vscr->bogus_tex = 0;
 		}
 		// if (vscr->renderer) {
@@ -1497,6 +1600,7 @@ sdl_fail:
 		if (vscr->bogus_tex) {
 			// SDL_DestroyTexture(vscr->bogus_tex);
 			glDeleteTextures(1, &vscr->bogus_tex);
+			checkGlError2("glDeleteTextures", vscr->bogus_tex);
 			vscr->bogus_tex = 0;
 		}
 		// if (vscr->renderer) {
@@ -1513,6 +1617,7 @@ sdl_fail:
 	 * after unloading library.
 	 */
 	eglReleaseThread();
+	checkEglError("eglReleaseThread");
 	return NULL;
 }
 
@@ -1537,17 +1642,20 @@ vdpy_sdl_display_term()
 		if (vscr->surf_tex) {
 			// SDL_DestroyTexture(vscr->surf_tex);
 			glDeleteTextures(1, &vscr->surf_tex);
+			checkGlError2("glDeleteTextures", vscr->surf_tex);
 			vscr->surf_tex = 0;
 		}
 		if (vscr->cur_tex) {
 			// SDL_DestroyTexture(vscr->cur_tex);
 			glDeleteTextures(1, &vscr->cur_tex);
+			checkGlError2("glDeleteTextures", vscr->cur_tex);
 			vscr->cur_tex = 0;
 		}
 
 		if (vdpy.egl_dmabuf_supported && (vscr->egl_img != EGL_NO_IMAGE_KHR))
 			vdpy.gl_ops.eglDestroyImageKHR(vdpy.eglDisplay,
 						vscr->egl_img);
+			checkEglError("eglDestroyImageKHR");
 	}
 
 	for (i = 0; i < vdpy.vscrs_num; i++) {
@@ -1555,6 +1663,7 @@ vdpy_sdl_display_term()
 		if (vscr->bogus_tex) {
 			// SDL_DestroyTexture(vscr->bogus_tex);
 			glDeleteTextures(1, &vscr->bogus_tex);
+			checkGlError2("glDeleteTextures", vscr->bogus_tex);
 			vscr->bogus_tex = 0;
 		}
 		// if (vscr->renderer) {
@@ -1571,18 +1680,27 @@ vdpy_sdl_display_term()
 	 * after unloading library.
 	 */
 	eglReleaseThread();
+	checkEglError("eglReleaseThread");
 	return NULL;
 }
 
 void *
 vdpy_sdl_display_proc(bool termed)
 {
+	static bool is_egl_current = false;
 	struct vdpy_display_bh *bh;
 
 	if (!vdpy.s.is_active || vdpy.s.is_termed) {
 		pr_info("display is exiting\n");
 		return NULL;
 	}
+	if (!is_egl_current) {
+		pr_info("vdpy_sdl_display_proc() eglMakeCurrent\n");
+		eglMakeCurrent(vdpy.eglDisplay, vdpy.eglSurface, vdpy.eglSurface, vdpy.eglContext);
+		checkEglError("eglMakeCurrent");
+		is_egl_current = true;
+	}
+
 	pthread_mutex_lock(&vdpy.vdisplay_mutex);
 
 	if (termed) {
@@ -1767,9 +1885,9 @@ gfx_ui_init()
 		SDL_GetDisplayBounds(vscr->pscreen_id, &vscr->pscreen_rect);
 
 		if (vscr->pscreen_rect.w < VDPY_MIN_WIDTH ||
-	    	    vscr->pscreen_rect.h < VDPY_MIN_HEIGHT) {
+				vscr->pscreen_rect.h < VDPY_MIN_HEIGHT) {
 			pr_err("Too small resolutions. Please check the "
-		       		" graphics system\n");
+			   		" graphics system\n");
 			SDL_Quit();
 			return -1;
 		}
@@ -1786,7 +1904,7 @@ gfx_ui_init()
 
 	/* Set the GL_parameter for Window/Renderer */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
-			    SDL_GL_CONTEXT_PROFILE_ES);
+				SDL_GL_CONTEXT_PROFILE_ES);
 	/* GLES2.0 is used */
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -1816,6 +1934,136 @@ gfx_ui_deinit()
 	// pr_info("SDL_Quit\r\n");
 }
 
+GLuint esLoadShader ( GLenum type, const char *shaderSrc )
+{
+	GLuint shader;
+	GLint compiled;
+
+	// Create the shader object
+	shader = glCreateShader ( type );
+	checkGlError("glCreateShader");
+	if ( shader == 0 )
+	{
+		pr_err("%s() failed to create shader!\n", __func__);
+		return 0;
+	}
+
+	// Load the shader source
+	glShaderSource ( shader, 1, &shaderSrc, NULL );
+	checkGlError("glShaderSource");
+
+	// Compile the shader
+	glCompileShader ( shader );
+	checkGlError("glCompileShader");
+
+	// Check the compile status
+	glGetShaderiv ( shader, GL_COMPILE_STATUS, &compiled );
+	checkGlError("glGetShaderiv");
+	if ( !compiled )
+	{
+		GLint infoLen = 0;
+
+		glGetShaderiv ( shader, GL_INFO_LOG_LENGTH, &infoLen );
+		checkGlError("glGetShaderiv2");
+		if ( infoLen > 1 )
+		{
+			char *infoLog = malloc ( sizeof ( char ) * infoLen );
+
+			glGetShaderInfoLog ( shader, infoLen, NULL, infoLog );
+			pr_err ( "Error compiling shader:\n%s\n", infoLog );
+
+			free ( infoLog );
+		}
+
+		glDeleteShader ( shader );
+		checkGlError("glDeleteShader");
+		pr_err("%s() failed to compile shader!\n", __func__);
+		return 0;
+	}
+
+	return shader;
+
+}
+
+GLuint esLoadProgram ( const char *vertShaderSrc, const char *fragShaderSrc )
+{
+	GLuint vertexShader;
+	GLuint fragmentShader;
+	GLuint programObject;
+	GLint linked;
+
+	// Load the vertex/fragment shaders
+	vertexShader = esLoadShader ( GL_VERTEX_SHADER, vertShaderSrc );
+	if ( vertexShader == 0 )
+	{
+		pr_err("%s() failed to load vertex shader!\n", __func__);
+		return 0;
+	}
+
+	fragmentShader = esLoadShader ( GL_FRAGMENT_SHADER, fragShaderSrc );
+	if ( fragmentShader == 0 )
+	{
+		glDeleteShader ( vertexShader );
+		checkGlError("glDeleteShader");
+		pr_err("%s() failed to load fragment shader!\n", __func__);
+		return 0;
+	}
+
+	// Create the program object
+	programObject = glCreateProgram ( );
+	checkGlError("glCreateProgram");
+	if ( programObject == 0 )
+	{
+		pr_err("%s() failed to create program!\n", __func__);
+		return 0;
+	}
+
+	glAttachShader ( programObject, vertexShader );
+	checkGlError("glAttachShader");
+	glAttachShader ( programObject, fragmentShader );
+	checkGlError("glAttachShader2");
+
+	// Link the program
+	glLinkProgram ( programObject );
+	checkGlError("glLinkProgram");
+
+	// Check the link status
+	glGetProgramiv ( programObject, GL_LINK_STATUS, &linked );
+	checkGlError("glGetProgramiv");
+
+	if ( !linked )
+	{
+		GLint infoLen = 0;
+
+		glGetProgramiv ( programObject, GL_INFO_LOG_LENGTH, &infoLen );
+		checkGlError("glGetProgramiv2");
+
+		if ( infoLen > 1 )
+		{
+			char *infoLog = malloc ( sizeof ( char ) * infoLen );
+
+			glGetProgramInfoLog ( programObject, infoLen, NULL, infoLog );
+			checkGlError("glGetProgramInfoLog");
+			pr_err ( "Error linking program:\n%s\n", infoLog );
+
+			free ( infoLog );
+		}
+
+		glDeleteProgram ( programObject );
+		checkGlError("glDeleteProgram");
+		pr_err("%s() failed to link program!\n", __func__);
+		return 0;
+	}
+
+	// Free up no longer needed shader resources
+	glDeleteShader ( vertexShader );
+	checkGlError("glDeleteShader");
+	glDeleteShader ( fragmentShader );
+	checkGlError("glDeleteShader2");
+
+	return programObject;
+}
+
 // 1, hardcode vdisplay/vscreen number to 1
 // 2, init egl context
 // called far before in 'hook_before_init', before 'vos_backend_init'
@@ -1824,11 +2072,12 @@ vdpy_gfx_ui_init(void *data)
 {
 	struct vscreen *vscr;
 	EGLint majorVersion;
-    EGLint minorVersion;
+	EGLint minorVersion;
 	EGLint numConfigs = 0, n = -1;
 	EGLConfig myConfig;
 	int w, h;
 
+	pr_dbg("%s", __func__);
 	// only support 1 physical screen now
 	vdpy.vscrs_num = 1;
 	vdpy.vscrs = calloc(VSCREEN_MAX_NUM, sizeof(struct vscreen));
@@ -1845,52 +2094,62 @@ vdpy_gfx_ui_init(void *data)
 	// SDL_GetDisplayBounds(vscr->pscreen_id, &vscr->pscreen_rect);
 	vdpy.eglDisplay = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 	if (eglInitialize(vdpy.eglDisplay, &majorVersion, &minorVersion) != EGL_TRUE) {
+		checkEglError("eglInitialize");
 		pr_err("%s, eglInitialize failed.", __func__);
 		return -1;
 	}
 
-    EGLint s_configAttribs[] = {
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-            EGL_RED_SIZE, 8,
-            EGL_GREEN_SIZE, 8,
-            EGL_BLUE_SIZE, 8,
-            EGL_ALPHA_SIZE, 8,
-            EGL_NONE };
+	EGLint s_configAttribs[] = {
+			EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+			EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+			EGL_RED_SIZE, 8,
+			EGL_GREEN_SIZE, 8,
+			EGL_BLUE_SIZE, 8,
+			EGL_ALPHA_SIZE, 8,
+			EGL_NONE };
 	eglChooseConfig(vdpy.eglDisplay, s_configAttribs, 0, 0, &numConfigs);
-    if (numConfigs <= 0) {
+	checkEglError("eglChooseConfig0");
+	if (numConfigs <= 0) {
 		pr_err("%s, eglChooseConfig failed.", __func__);
 		return -1;
-    }
+	}
 
 	EGLConfig* const configs = malloc(sizeof(EGLConfig) * numConfigs);
 	eglChooseConfig(vdpy.eglDisplay, s_configAttribs, configs, numConfigs, &n);
+	checkEglError("eglChooseConfig1");
 	myConfig = configs[0];
 	free(configs);
 
 	// vdpy.eglContext = SDL_GL_GetCurrentContext();
 	EGLint context_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 	vdpy.eglContext = eglCreateContext(vdpy.eglDisplay, myConfig, EGL_NO_CONTEXT, context_attribs);
+	checkEglError("eglCreateContext");
 
-    EGLNativeWindowType window = (EGLNativeWindowType)data;
-    vdpy.eglSurface = eglCreateWindowSurface(vdpy.eglDisplay, myConfig, window, NULL);
-    if (vdpy.eglSurface == EGL_NO_SURFACE) {
-        pr_err("gelCreateWindowSurface failed.\n");
-        return -1;
-    }
+	EGLNativeWindowType window = (EGLNativeWindowType)data;
+	vdpy.eglSurface = eglCreateWindowSurface(vdpy.eglDisplay, myConfig, window, NULL);
+	checkEglError("eglCreateWindowSurface");
+	if (vdpy.eglSurface == EGL_NO_SURFACE) {
+		pr_err("gelCreateWindowSurface failed.\n");
+		return -1;
+	}
 
 	EGLBoolean returnValue;
-    returnValue = eglMakeCurrent(vdpy.eglDisplay, vdpy.eglSurface, vdpy.eglSurface, vdpy.eglContext);
-    // checkEglError("eglMakeCurrent", returnValue);
-    if (returnValue != EGL_TRUE) {
-        pr_err("eglMakeCurrent failed.\n");
-        return -1;
-    }
-    eglQuerySurface(vdpy.eglDisplay, vdpy.eglSurface, EGL_WIDTH, &w);
-    eglQuerySurface(vdpy.eglDisplay, vdpy.eglSurface, EGL_HEIGHT, &h);
+	returnValue = eglMakeCurrent(vdpy.eglDisplay, vdpy.eglSurface, vdpy.eglSurface, vdpy.eglContext);
+	checkEglError("eglMakeCurrent");
+	// checkEglError("eglMakeCurrent", returnValue);
+	if (returnValue != EGL_TRUE) {
+		pr_err("eglMakeCurrent failed.\n");
+		return -1;
+	}
+	eglQuerySurface(vdpy.eglDisplay, vdpy.eglSurface, EGL_WIDTH, &w);
+	checkEglError("eglQuerySurface0");
+	eglQuerySurface(vdpy.eglDisplay, vdpy.eglSurface, EGL_HEIGHT, &h);
+	checkEglError("eglQuerySurface1");
 	vscr->pscreen_rect.x = vscr->pscreen_rect.y = 0;
 	vscr->guest_width = vscr->width = vscr->pscreen_rect.w = w;
 	vscr->guest_height = vscr->height = vscr->pscreen_rect.h = h;
+	pr_info("%s (vdpy.eglDisplay/vdpy.eglSurface)=0x%x/0x%x w/h=%d/%d\n",
+	  __func__, vdpy.eglDisplay, vdpy.eglSurface, w, h);
 
 	if (vscr->pscreen_rect.w < VDPY_MIN_WIDTH ||
 			vscr->pscreen_rect.h < VDPY_MIN_HEIGHT) {
@@ -1900,25 +2159,78 @@ vdpy_gfx_ui_init(void *data)
 		return -1;
 	}
 
+	char vShaderStr[] =
+			"#version 300 es							\n"
+			"layout(location = 0) in vec4 a_position;   \n"
+			"layout(location = 1) in vec2 a_texCoord;   \n"
+			"out vec2 v_texCoord;					   \n"
+			"void main()								\n"
+			"{										  \n"
+			"   gl_Position = a_position;			   \n"
+			"   v_texCoord = a_texCoord;				\n"
+			"}										  \n";
+
+	char fShaderStr[] =
+			"#version 300 es									 \n"
+			"#extension GL_OES_EGL_image_external : require	  \n"
+			"precision mediump float;							\n"
+			"layout(location = 0) out vec4 outColor;			 \n"
+			"in vec2 v_texCoord;								 \n"
+			"uniform samplerExternalOES uTexture;				\n"
+			"void main()										 \n"
+			"{												   \n"
+			"  outColor = texture2D(uTexture, v_texCoord);   \n"
+			"}												   \n";
+	vdpy.programObjectExternal = esLoadProgram(vShaderStr, fShaderStr);
+	if (!vdpy.programObjectExternal)
+		pr_err("%s failed to load programObjectExternal\n", __func__);
+
+	char fShaderStr2[] =
+			"#version 300 es									 \n"
+			"precision mediump float;							\n"
+			"layout(location = 0) out vec4 outColor;			 \n"
+			"in vec2 v_texCoord;								 \n"
+			"uniform sampler2D uTexture;				\n"
+			"void main()										 \n"
+			"{												   \n"
+			"  outColor = texture2D(uTexture, v_texCoord);   \n"
+			"}												   \n";
+	vdpy.programObject = esLoadProgram(vShaderStr, fShaderStr2);
+	if (!vdpy.programObject)
+		pr_err("%s failed to load programObject\n", __func__);
+
+	returnValue = eglMakeCurrent(vdpy.eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+	checkEglError("eglMakeCurrent");
+
 	return 0;
 }
 
 void
 vdpy_gfx_ui_deinit()
 {
-    if (vdpy.eglDisplay != EGL_NO_DISPLAY) {
-        eglMakeCurrent(vdpy.eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (vdpy.eglContext != EGL_NO_CONTEXT) {
-            eglDestroyContext(vdpy.eglDisplay, vdpy.eglContext);
-        }
-        if (vdpy.eglSurface != EGL_NO_SURFACE) {
-            eglDestroySurface(vdpy.eglDisplay, vdpy.eglSurface);
-        }
-        eglTerminate(vdpy.eglDisplay);
-    }
-    vdpy.eglDisplay = EGL_NO_DISPLAY;
-    vdpy.eglContext = EGL_NO_CONTEXT;
-    vdpy.eglSurface = EGL_NO_SURFACE;
+	// Delete program object
+	glDeleteProgram(vdpy.programObjectExternal);
+	checkGlError("glDeleteProgram1");
+	glDeleteProgram(vdpy.programObject);
+	checkGlError("glDeleteProgram2");
+
+	if (vdpy.eglDisplay != EGL_NO_DISPLAY) {
+		eglMakeCurrent(vdpy.eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+		checkEglError("eglMakeCurrent");
+		if (vdpy.eglContext != EGL_NO_CONTEXT) {
+			eglDestroyContext(vdpy.eglDisplay, vdpy.eglContext);
+			checkEglError("eglDestroyContext");
+		}
+		if (vdpy.eglSurface != EGL_NO_SURFACE) {
+			eglDestroySurface(vdpy.eglDisplay, vdpy.eglSurface);
+			checkEglError("eglDestroySurface");
+		}
+		eglTerminate(vdpy.eglDisplay);
+		checkEglError("eglTerminate");
+	}
+	vdpy.eglDisplay = EGL_NO_DISPLAY;
+	vdpy.eglContext = EGL_NO_CONTEXT;
+	vdpy.eglSurface = EGL_NO_SURFACE;
 
 	if (vdpy.vscrs) {
 		free(vdpy.vscrs);

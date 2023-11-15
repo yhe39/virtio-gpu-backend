@@ -16,6 +16,7 @@
 
 void *run_backend(void *info);
 int create_backend_thread(struct virtio_backend_info *info);
+void close_backend_thread();
 
 void dump_hex(void *base, int size);
 void dump_desc(volatile struct vring_desc *desc, int idx, bool cond);
