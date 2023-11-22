@@ -2087,7 +2087,7 @@ vdpy_gfx_ui_init(void *data)
 	}
 	
 	vscr = &vdpy.vscrs[0];
-	vscr->is_fullscreen = true;
+	vscr->is_fullscreen = false;
 	vscr->pscreen_id = 0;
 
 	// create egl surface from native window
@@ -2145,6 +2145,8 @@ vdpy_gfx_ui_init(void *data)
 	checkEglError("eglQuerySurface0");
 	eglQuerySurface(vdpy.eglDisplay, vdpy.eglSurface, EGL_HEIGHT, &h);
 	checkEglError("eglQuerySurface1");
+	w = 0x400;
+	h = 0x300;
 	vscr->pscreen_rect.x = vscr->pscreen_rect.y = 0;
 	vscr->guest_width = vscr->width = vscr->pscreen_rect.w = w;
 	vscr->guest_height = vscr->height = vscr->pscreen_rect.h = h;

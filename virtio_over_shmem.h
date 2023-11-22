@@ -73,4 +73,6 @@ int vos_backend_init(struct virtio_backend_info *info);
 void vos_backend_run(void);
 void vos_backend_deinit(struct virtio_backend_info *info);
 
+//void write_config(struct virtio_base *base,int offset,int size);
+
 #endif  /* __BACKENDS_VIRTIO_OVER_SHMEM_H__ */

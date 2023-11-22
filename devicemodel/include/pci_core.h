@@ -363,6 +363,7 @@ void	pci_generate_msi(struct pci_vdev *dev, int index);
  * @return None
  */
 void	pci_generate_msix(struct pci_vdev *dev, int index);
+void	pci_generate_msix_config(struct pci_vdev *dev, int index);
 
 /**
  * @brief Assert INTx pin of virtual PCI device
