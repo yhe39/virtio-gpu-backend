@@ -231,6 +231,15 @@ close_evt_fds:
 
 	return ret;
 }
+/*
+void write_config(struct virtio_base *base,int offset,int size)
+{
+
+	base->vops->cfgread(base, offset, size, (void *)(virtio_header->config + offset));
+
+
+}
+*/
 
 void vos_backend_run(void)
 {

@@ -546,9 +546,12 @@ virtio_config_changed(struct virtio_base *vb)
 
 	vb->config_generation++;
 
-	if (pci_msix_enabled(vb->dev))
-		pci_generate_msix(vb->dev, vb->msix_cfg_idx);
-	else {
+	if (pci_msix_enabled(vb->dev)) {
+		vb->msix_cfg_idx = 0;
+		pr_err("--hang-- virtio config changed msix:%d \r\n",vb->msix_cfg_idx);
+		pci_generate_msix_config(vb->dev, vb->msix_cfg_idx);
+
+	}else {
 		VIRTIO_BASE_LOCK(vb);
 		vb->isr |= VIRTIO_PCI_ISR_CONFIG;
 		pci_generate_msi(vb->dev, 0);

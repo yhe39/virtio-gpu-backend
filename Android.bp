@@ -121,6 +121,4 @@ cc_library_shared {
 
     export_static_lib_headers: [
     ],
-
 }
- 

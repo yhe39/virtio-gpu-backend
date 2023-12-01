@@ -31,6 +31,7 @@
 #include "console.h"
 #include "vga.h"
 #include "atomic.h"
+//#include "virtio_over_shmem.h"
 
 /*
  * Queue definitions.
@@ -508,6 +509,7 @@ virtio_gpu_reset(void *vdev)
 	virtio_reset_dev(&gpu->base);
 }
 
+
 static int
 virtio_gpu_cfgread(void *vdev, int offset, int size, uint32_t *retval)
 {
@@ -515,6 +517,10 @@ virtio_gpu_cfgread(void *vdev, int offset, int size, uint32_t *retval)
 	void *ptr;
 
 	gpu = vdev;
+
+	if (offset == offsetof(struct virtio_gpu_config, events_read))
+		pr_err("--hang- read events_read happen -------\r\n");
+
 	ptr = (uint8_t *)&gpu->cfg + offset;
 	memcpy(retval, ptr, size);
 
@@ -531,6 +537,7 @@ virtio_gpu_cfgwrite(void *vdev, int offset, int size, uint32_t value)
 	ptr = (uint8_t *)&gpu->cfg + offset;
 	if (offset == offsetof(struct virtio_gpu_config, events_clear)) {
 
+		pr_err("---hang-- cfgwrite happen event readvalue :%d------------\r\n",gpu->cfg.events_read);
 		memcpy(ptr, &value, size);
 		gpu->cfg.events_read &= ~value;
 		gpu->cfg.events_clear &= ~value;
@@ -1466,6 +1473,20 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_command *cmd)
 	virtio_gpu_dmabuf_unref(r2d->dma_info);
 	return;
 }
+bool hotplug_trigered = false;
+void triger_hotplug(struct virtio_gpu *gpu)
+{
+	pr_dbg("%s ---yue-- \n", __func__);
+	if (!hotplug_trigered) {
+		pr_dbg("---yue-- trigger hotplug event once \n");
+		hotplug_trigered = true;
+		gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
+		//write_config(&gpu->base,0,4);
+		virtio_config_changed(&gpu->base);
+	} else {
+		pr_dbg("---yue-- trigered. no opertion \n");
+	}
+}
 
 static void
 virtio_gpu_ctrl_bh(void *data)
@@ -1482,6 +1503,49 @@ virtio_gpu_ctrl_bh(void *data)
 	vdev = (struct virtio_gpu *)(vq->base);
 	cmd.gpu = vdev;
 	cmd.iolen = 0;
+
+/*
+	char property[PROPERTY_VALUE_MAX];
+	memset(property, 0 , PROPERTY_VALUE_MAX);
+	property_get("hotplug.ivshmem.display", property, "0");
+	pr_dbg("--yue- hotplug.ivshmem.display is %x\n", property);
+	bool hotplug_display = strcmp(property, "0") == 0 ? true : false;
+	if (hotplug_display) {
+		triger_hotplug(vdev);
+		pr_dbg("--yue-- trigger hotplug\n");
+	} else {
+		pr_dbg("--yue-- do not hotplug\n");
+	}
+*/
+	const char* command = "getprop hotplug.ivshmem.display";
+	FILE* file = popen(command, "r");
+
+	if (!file) {
+		pr_dbg("%s ---yue--  failed to start getprop!", __func__);
+		return;
+	}
+	char value[128];
+	memset(value, 0, sizeof(value));
+
+   	if (fgets(value, sizeof(value), file) != NULL) {
+	        if (value[0] != '\0' && value[0] != '\n') {
+			pr_dbg("--yue-- Property value: %s", value);
+			triger_hotplug(vdev);
+        	} else {
+			pr_dbg("--yue-- Property value is empty.\n");
+	        }
+    	} else {
+		pr_dbg("--yue-- Failed to read property value.\n");
+	}
+/*
+	if(value[0] != '\0') {
+		triger_hotplug(vdev);
+		pr_dbg("--yue-- trigger hotplug\n");
+	} else {
+		pr_dbg("--yue-- do not hotplug\n");
+	}	
+*/
+	pclose(file);
 
 	while (vq_has_descs(vq)) {
 		n = vq_getchain(vq, &idx, iov, VIRTIO_GPU_MAXSEGS, flags);
@@ -1501,11 +1565,11 @@ virtio_gpu_ctrl_bh(void *data)
 
 		switch (cmd.hdr.type) {
 		case VIRTIO_GPU_CMD_GET_EDID:
-			pr_dbg("%s VIRTIO_GPU_CMD_GET_EDID\n", __func__);
+			pr_err("%s VIRTIO_GPU_CMD_GET_EDID\n", __func__);
 			virtio_gpu_cmd_get_edid(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_GET_DISPLAY_INFO:
-			pr_dbg("%s VIRTIO_GPU_CMD_GET_DISPLAY_INFO\n", __func__);
+			pr_err("%s VIRTIO_GPU_CMD_GET_DISPLAY_INFO\n", __func__);
 			virtio_gpu_cmd_get_display_info(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_CREATE_2D:

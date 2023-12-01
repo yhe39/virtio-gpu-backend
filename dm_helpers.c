@@ -90,11 +90,23 @@ vm_find_memfd_region(struct vmctx *ctx, vm_paddr_t gpa, struct vm_mem_region *re
 	return true;
 }
 
+void pci_generate_msix_config(struct pci_vdev *dev, int index)
+{
+	struct shmem_info *info = (struct shmem_info *)dev->vmctx;
+
+	virtio_header->config_event= 1;
+	virtio_header->config[0] = 0x1;
+pr_err("--hang-- %s  \r\n",__func__);
+	__sync_synchronize();
+	info->ops->notify_peer(info, index);
+}
+
 void pci_generate_msix(struct pci_vdev *dev, int index)
 {
 	struct shmem_info *info = (struct shmem_info *)dev->vmctx;
 
 	virtio_header->queue_event = 1;
+pr_err("--hang-- %s  \r\n",__func__);
 	__sync_synchronize();
 	info->ops->notify_peer(info, index);
 }
