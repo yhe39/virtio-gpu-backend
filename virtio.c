@@ -158,7 +158,6 @@ virtio_reset_dev(struct virtio_base *base)
 		pci_lintr_deassert(base->dev);
 	base->isr = 0;
 	base->msix_cfg_idx = VIRTIO_MSI_NO_VECTOR;
-	pr_err("%s --hang-- msix_cfg_idx:%llx \r\n", __func__, base->msix_cfg_idx);
 	base->device_feature_select = 0;
 	base->driver_feature_select = 0;
 	base->config_generation = 0;
@@ -748,7 +747,6 @@ virtio_common_cfg_read(struct pci_vdev *dev, uint64_t offset, int size)
 		break;
 	case VIRTIO_PCI_COMMON_MSIX:
 		value = base->msix_cfg_idx;
-		pr_err("%s --hang-- about to read msix config idx :%llx\r\n", __func__, value);
 		break;
 	case VIRTIO_PCI_COMMON_NUMQ:
 		value = vops->nvq;
@@ -870,7 +868,6 @@ virtio_common_cfg_write(struct pci_vdev *dev, uint64_t offset, int size,
 		}
 		break;
 	case VIRTIO_PCI_COMMON_MSIX:
-		pr_err("%s --hang-- about to write msix_cfg_idx:%llx\r\n",__func__, value);
 		base->msix_cfg_idx = value;
 		break;
 	case VIRTIO_PCI_COMMON_STATUS:

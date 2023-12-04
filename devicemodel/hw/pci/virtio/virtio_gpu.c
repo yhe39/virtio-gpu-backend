@@ -1474,18 +1474,50 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_command *cmd)
 	return;
 }
 bool hotplug_trigered = false;
-void triger_hotplug(struct virtio_gpu *gpu)
+void triger_hotplug(void *data)
 {
 	pr_dbg("%s ---yue-- \n", __func__);
-	if (!hotplug_trigered) {
-		pr_dbg("---yue-- trigger hotplug event once \n");
-		hotplug_trigered = true;
-		gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
-		//write_config(&gpu->base,0,4);
-		virtio_config_changed(&gpu->base);
-	} else {
-		pr_dbg("---yue-- trigered. no opertion \n");
-	}
+        const char* command = "getprop hotplug.ivshmem.display";
+        FILE* file = popen(command, "r");
+
+        if (!file) {
+                pr_dbg("%s ---yue--  failed to start getprop!", __func__);
+                return;
+        }
+        char value[128];
+        memset(value, 0, sizeof(value));
+
+        if (fgets(value, sizeof(value), file) != NULL) {
+                if (value[0] != '\0' && value[0] != '\n') {
+                        value[strcspn(value, "\r\n")] = '\0';
+                        if (strcmp(value, "1") == 0) {
+                                pr_dbg("--yue-- property value is 1");
+				struct virtio_gpu *gpu = (struct virtio_gpu *)data;
+
+				if (!hotplug_trigered) {
+					pr_dbg("---yue-- trigger hotplug event once \n");
+					hotplug_trigered = true;
+					gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
+					//write_config(&gpu->base,0,4);
+					virtio_config_changed(&gpu->base);
+				} else {
+					pr_dbg("---yue-- trigered. no opertion \n");
+				}
+                            } else if (strcmp(value, "0") == 0) {
+                                pr_dbg("--yue-- property value is 0");
+                                hotplug_trigered = false;
+				pr_dbg("--yue-- reset hotplug_trigered\n");
+                        } else {
+                                pr_dbg("--yue-- property value is neither 0 nor 1: %s", value);
+				pr_dbg("--yue-- property value: %s", value);
+                        }
+                } else {
+                        pr_dbg("--yue-- property value is empty.\n");
+                }
+        } else {
+                pr_dbg("--yue-- failed to read property value.\n");
+        }
+	pclose(file);
 }
 
 static void
@@ -1503,49 +1535,6 @@ virtio_gpu_ctrl_bh(void *data)
 	vdev = (struct virtio_gpu *)(vq->base);
 	cmd.gpu = vdev;
 	cmd.iolen = 0;
-
-/*
-	char property[PROPERTY_VALUE_MAX];
-	memset(property, 0 , PROPERTY_VALUE_MAX);
-	property_get("hotplug.ivshmem.display", property, "0");
-	pr_dbg("--yue- hotplug.ivshmem.display is %x\n", property);
-	bool hotplug_display = strcmp(property, "0") == 0 ? true : false;
-	if (hotplug_display) {
-		triger_hotplug(vdev);
-		pr_dbg("--yue-- trigger hotplug\n");
-	} else {
-		pr_dbg("--yue-- do not hotplug\n");
-	}
-*/
-	const char* command = "getprop hotplug.ivshmem.display";
-	FILE* file = popen(command, "r");
-
-	if (!file) {
-		pr_dbg("%s ---yue--  failed to start getprop!", __func__);
-		return;
-	}
-	char value[128];
-	memset(value, 0, sizeof(value));
-
-   	if (fgets(value, sizeof(value), file) != NULL) {
-	        if (value[0] != '\0' && value[0] != '\n') {
-			pr_dbg("--yue-- Property value: %s", value);
-			triger_hotplug(vdev);
-        	} else {
-			pr_dbg("--yue-- Property value is empty.\n");
-	        }
-    	} else {
-		pr_dbg("--yue-- Failed to read property value.\n");
-	}
-/*
-	if(value[0] != '\0') {
-		triger_hotplug(vdev);
-		pr_dbg("--yue-- trigger hotplug\n");
-	} else {
-		pr_dbg("--yue-- do not hotplug\n");
-	}	
-*/
-	pclose(file);
 
 	while (vq_has_descs(vq)) {
 		n = vq_getchain(vq, &idx, iov, VIRTIO_GPU_MAXSEGS, flags);
@@ -1840,6 +1829,9 @@ virtio_gpu_init(struct vmctx *ctx, struct pci_vdev *dev, char *opts __attribute_
 
 	gpu->scanout_num = 1;
 	gpu->vdpy_handle = vdpy_init(&gpu->scanout_num);
+
+	triger_init(triger_hotplug,gpu);
+
 	gpu->base.mtx = &gpu->mtx;
 	gpu->base.device_caps = VIRTIO_GPU_S_HOSTCAPS;
 
