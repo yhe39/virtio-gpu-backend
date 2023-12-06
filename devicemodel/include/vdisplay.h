@@ -100,6 +100,8 @@ void vdpy_cursor_move(int handle, int scanout_id, uint32_t x, uint32_t y);
 int vdpy_deinit(int handle);
 void gfx_ui_deinit();
 
+void triger_init(void (*func)(void *data), void *data);
+
 int vdpy_gfx_ui_init(void *data);
 void vdpy_gfx_ui_deinit();
 void *vdpy_sdl_display_proc(bool termed);

@@ -1406,6 +1406,15 @@ vdpy_create_vscreen_window(struct vscreen *vscr)
 	// SDL_SetTextureColorMod(vscr->bogus_tex, 0x80, 0x80, 0x80);
 	return 0;
 }
+static void *triger_data;
+void (*triger)(void *data);
+
+void triger_init(void (*func)(void *data), void *data)
+{
+	triger_data = data;
+	triger = func;
+}
+
 
 #ifdef VDPY_SEPERATE_THREAD
 static void *
@@ -1466,6 +1475,15 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 			pr_info("display is exiting\n");
 			break;
 		}
+///////////////////////////////////////
+		pr_info("--yue-- loop in SDL display thread\n");
+		if (triger != NULL) {
+			pr_info("--yue-- trigger_data\n");
+			(*triger)(triger_data);
+		} else {
+			pr_info("--yue-- trigger is NULL!\n");
+		}
+///////////////////////////////////
 		pthread_mutex_lock(&vdpy.vdisplay_mutex);
 
 		if (TAILQ_EMPTY(&vdpy.request_list))
