@@ -18,14 +18,9 @@
 // #include "agq.h"
 // #include "circle.h"
 // #include "common.h"
-// #include "renderer.h"
+#include "renderer.h"
+#include "vdisplay_client.h"
 // #include "vecmath.h"
-
-extern "C" {
-#include <virtio_over_shmem.h>
-#include <utils.h>
-#include <vdisplay.h>
-}
 
 #include <cassert>
 #include <chrono>
@@ -42,12 +37,13 @@ extern "C" {
 #include <EGL/eglext.h>
 
 #include <android/sensor.h>
-#include <android/log.h>
 #include <android_native_app_glue.h>
 
+#include "common.h"
 
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, "main", __VA_ARGS__))
+#define USE_GAME_RENDER
 
+#ifndef USE_GAME_RENDER
 static void init_vdpy(struct virtio_backend_info *info) {
     vdpy_gfx_ui_init(info->native_window);
 }
@@ -57,6 +53,7 @@ static struct virtio_backend_info virtio_gpu_info = {
 	.pci_vdev_ops = &pci_ops_virtio_gpu,
 	.hook_before_init = init_vdpy,
 };
+#endif
 
 namespace {
 int animating = 0;
@@ -75,7 +72,8 @@ int32_t engine_handle_input(struct android_app*, AInputEvent* event) {
 /**
  * Process the next main command.
  */
-void engine_handle_cmd(struct android_app* app, int32_t cmd) {
+void engine_handle_cmd(struct android_app* app, int32_t cmd) {    
+    Renderer *renderer = (Renderer *)(app->userData);
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
             // We are not saving the state.
@@ -86,8 +84,13 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
             LOGI("APP_CMD_INIT_WINDOW");
             if (app->window != NULL) {
                 LOGI("APP_CMD_INIT_WINDOW -1");
+#ifdef USE_GAME_RENDER
+                renderer->init(app->window);
+                renderer->draw();
+#else
                 virtio_gpu_info.native_window = app->window;
                 create_backend_thread(&virtio_gpu_info);
+#endif
 
                 animating = 1;
             }
@@ -95,7 +98,11 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
+#ifdef USE_GAME_RENDER
+            renderer->terminate();
+#else
             close_backend_thread();
+#endif
             LOGI("APP_CMD_TERM_WINDOW");
             animating = 0;
             break;
@@ -125,6 +132,11 @@ void android_main(struct android_app* state) {
 
     LOGI("Running with SDK %d", state->activity->sdkVersion);
 
+    std::unique_ptr<Renderer> renderer(new Renderer());
+    std::unique_ptr<DisplayClient> display_client(new DisplayClient(renderer.get()));
+    display_client->start();
+
+    state->userData = renderer.get();
     state->onAppCmd = engine_handle_cmd;
     state->onInputEvent = engine_handle_input;
 
@@ -147,7 +159,11 @@ void android_main(struct android_app* state) {
             LOGI("ALooper_pollAll -2");
             // Check if we are exiting.
             if (state->destroyRequested != 0) {
+#ifdef USE_GAME_RENDER
+                renderer->terminate();
+#else
                 close_backend_thread();
+#endif
                 LOGI("state->destroyRequested != 0, exit...");
                 return;
             }
@@ -156,7 +172,7 @@ void android_main(struct android_app* state) {
 
 #ifdef USE_GAME_RENDER
         if (animating) {
-            renderer->update();
+            // renderer->update();
 
             // Drawing is throttled to the screen update rate, so there
             // is no need to do timing here.

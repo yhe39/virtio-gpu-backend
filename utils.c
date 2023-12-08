@@ -143,7 +143,7 @@ void set_shmem_args(struct virtio_backend_info *info)
 	       info->shmem_ops->name, info->shmem_devpath, info->opts);
 }
 
-void *run_backend(void *data)
+void *run_backend(void *data, int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 {
 	int ret;
 	struct virtio_backend_info *info = (struct virtio_backend_info *)data;
@@ -169,24 +169,6 @@ void *run_backend(void *data)
 	vos_backend_deinit(info);
 	pr_info	("%s() -6.\n", __func__);
 	return NULL;
-}
-
-int create_backend_thread(struct virtio_backend_info *info)
-{
-	pr_info	("start create_backend_thread.\n");
-	if (pthread_create(&info->tid, NULL, run_backend, (void *)info)) {
-		pr_err("Failed to create the create_backend_thread.\n");
-		return -1;
-	}
-	pr_info	("start create_backend_thread -1.\n");
-	pthread_setname_np(info->tid, "acrn_gpu_backend");
-	pr_info	("start create_backend_thread -2.\n");
-	return 0;
-}
-
-void close_backend_thread()
-{
-	//vm_set_suspend_mode(VM_SUSPEND_NONE);
 }
 
 void dump_hex(void *base, int size)
