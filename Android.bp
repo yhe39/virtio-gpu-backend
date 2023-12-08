@@ -4,9 +4,6 @@ package {
 
 cc_library_static {
     name: "libpixman",
-    
-    sdk_version: "current",
-    sdk_variant_only: true,
 
     srcs: [
         "pixman/pixman/pixman-access-accessors.c",
@@ -59,28 +56,17 @@ cc_library_shared {
     sdk_variant_only: true,
 
     srcs: [
-        "shmem_ivshm_ivshmem.c",
-        "virtio.c",
-        "virtio_over_shmem.c",
-        "dm_helpers.c",
-        "dm_stubs.c",
-        "utils.c",
-        "main.cpp",
-	"devicemodel/lib/dm_string.c",
-	"devicemodel/core/mevent.c",
-	"devicemodel/core/timer.c",
-	"devicemodel/hw/block_if.c",
-	"devicemodel/hw/gc.c",
-	"devicemodel/hw/vga.c",
-	"devicemodel/hw/pci/virtio/vhost.c",
-	"devicemodel/hw/pci/virtio/virtio_gpu.c",
-    "devicemodel/hw/vdisplay_egl.c",
+        "client/main.cpp",
+        "client/renderer.cpp",
+        "client/vdisplay_client.cpp",
     ],
 
     local_include_dirs: [
         "devicemodel/include/public",
         "misc/library/include",
         "devicemodel/include",
+        "pixman/pixman/",
+        "client",
     ],
 
     stl: "libc++_static",
@@ -112,7 +98,6 @@ cc_library_shared {
 
     static_libs: [
     "android_native_app_glue",
-    "libpixman",
     "libbase_ndk",
     ],
     ldflags: [
@@ -121,4 +106,66 @@ cc_library_shared {
 
     export_static_lib_headers: [
     ],
+}
+
+cc_binary {
+    name: "acrn-virtio-gpu",
+
+    srcs: ["acrn-virtio-gpu.c",
+        "shmem_ivshm_ivshmem.c",
+        "virtio.c",
+        "virtio_over_shmem.c",
+        "dm_helpers.c",
+        "dm_stubs.c",
+        "utils.c",
+        "devicemodel/lib/dm_string.c",
+        "devicemodel/core/mevent.c",
+        "devicemodel/core/timer.c",
+        "devicemodel/hw/block_if.c",
+        "devicemodel/hw/gc.c",
+        "devicemodel/hw/vga.c",
+        "devicemodel/hw/pci/virtio/vhost.c",
+        "devicemodel/hw/pci/virtio/virtio_gpu.c",
+        "devicemodel/hw/vdisplay_server.c",
+    ],
+
+    local_include_dirs: [
+        "devicemodel/include/public",
+        "misc/library/include",
+        "devicemodel/include",
+    ],
+
+    stl: "libc++_static",
+    cflags: [
+        "-pthread",
+        "-Wall",
+        "-D__USE_BSD",
+    ],
+    cppflags: ["-std=c++14"],
+
+    shared_libs: [
+        "libEGL",
+        "libGLESv3",
+        "liblog",
+        "libz",
+        "libsync",
+        "libc",
+        "libandroid",
+    ],
+
+    header_libs: [
+        "jni_headers",
+    ],
+
+    export_header_lib_headers: [
+    ],
+
+    static_libs: [
+    "libpixman",
+    ],
+
+    export_static_lib_headers: [
+    ],
+
+relative_install_path: "hw"
 }
