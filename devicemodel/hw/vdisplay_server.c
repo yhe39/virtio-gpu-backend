@@ -895,7 +895,7 @@ sdl_fail:
 }
 
 
-#define SERVER_SOCK_PATH  "/data/virt_disp_server"
+#define SERVER_SOCK_PATH  "/data/local/ipc/virt_disp_server"
 static int client_sock = -1;
 static inline int client_send(int e_type, void *data, int len)
 {
@@ -907,14 +907,14 @@ static inline int client_send(int e_type, void *data, int len)
         evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
         evt_hdr.e_size = len;
         ret = send(client_sock, &evt_hdr, sizeof(evt_hdr), 0);
-        if (ret != len) {
-            pr_err("%s() send header fail(%d vs. %d)", ret, sizeof(evt_hdr));
+        if (ret != sizeof(evt_hdr)) {
+            pr_err("%s() send header fail(%d vs. %d)", __func__, ret, sizeof(evt_hdr));
             return -1;
         }
 
         ret = send(client_sock, data, len, 0);
         if (ret != len) {
-            pr_err("%s() send body fail(%d vs. %d)", ret, len);
+            pr_err("%s() send body fail(%d vs. %d)", __func__, ret, len);
             return -1;
         }
     }
@@ -939,6 +939,8 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 
     struct dpy_evt_header msg_header;
 
+	pr_info("%s() -1\n", __func__);
+
     memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
     server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (server_sock == -1){
@@ -946,10 +948,12 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
         return NULL;
     }
 
+	pr_info("%s() -2\n", __func__);
     server_sockaddr.sun_family = AF_UNIX;   
     strcpy(server_sockaddr.sun_path, SERVER_SOCK_PATH); 
     len = sizeof(server_sockaddr);
     
+	pr_info("%s() -3\n", __func__);
     unlink(SERVER_SOCK_PATH);
     ret = bind(server_sock, (struct sockaddr *) &server_sockaddr, len);
     if (ret == -1){
@@ -976,6 +980,8 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
         goto close_epoll_fd;
     }
 
+	pr_info("display server thread is created\n");
+
     while (1) {
         int numEvents = epoll_wait(epollfd, events, 5, -1);
         if (numEvents == -1) {
@@ -994,18 +1000,22 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 
                 // Close previous client connect, and remove listener
                 if (client_sock != -1) {
+	pr_info("%s() -4.0\n", __func__);
                     event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
                     event.data.fd = client_sock;
                     if (epoll_ctl(epollfd, EPOLL_CTL_DEL, client_sock, &event) == -1) {
                         pr_err("EPOLL_CTL_DEL client %d fail!", client_sock);
                     }
+                    shutdown(client_sock, SHUT_RDWR);
                     close(client_sock);
                 }
 
+	pr_info("%s() -4.1\n", __func__);
                 client_sock = new_client_sock;
                 if (vscr->set_modifier)
                     client_send(DPY_EVENT_SET_MODIFIER, &vscr->modifier, sizeof(vscr->modifier));
 
+	pr_info("%s() -4.2\n", __func__);
                 // Add new listener
                 event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
                 event.data.fd = client_sock;
@@ -1013,15 +1023,19 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                     pr_err("EPOLL_CTL_ADD client %d fail!", client_sock);
                 }
             } else if (events[i].data.fd == client_sock) {
+	pr_info("%s() -5.1\n", __func__);
 				if (!(events[i].events & EPOLLIN)) {
 					pr_err("poll client error: 0x%x", events[i].events);
 					continue;
 				}
 
-				while ((ret = recv(client_sock, &msg_header, sizeof(msg_header), 0) ) > 0) {
-					if (ret != sizeof(msg_header)) {
+	pr_info("%s() -5.2\n", __func__);
+				do {
+					ret = recv(client_sock, &msg_header, sizeof(msg_header), 0);
+					if ((ret <= 0) || (ret != sizeof(msg_header))) {
 						pr_err("recv event header fail (%d vs. %d)!", ret, sizeof(msg_header));
-						continue;
+						while (recv(client_sock, &buf, 256, 0) > 0);
+						break;
 					}
 
 					if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
@@ -1031,10 +1045,15 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 						break;
 					}
 
+	pr_info("%s() -5.3\n", __func__);
 					ret = recv(client_sock, &buf, msg_header.e_size, 0);
-					if (ret != msg_header.e_size)
+					if (ret != msg_header.e_size) {
 						pr_err("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
+						while (recv(client_sock, &buf, 256, 0) > 0);
+						break;
+					}
 
+	pr_info("%s() -5.4\n", __func__);
 					switch (msg_header.e_type) {
 						case DPY_EVENT_DISPLAY_INFO:
 						{
@@ -1048,7 +1067,7 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 						default:
 							break;
 					}
-				}
+				} while (true);
             }
 		    pthread_mutex_unlock(&vdpy.client_mutex);
         }
@@ -1060,10 +1079,14 @@ close_epoll_fd:
     }
 
 close_sockets:
-    if (server_sock != -1)
+    if (server_sock != -1) {
+        shutdown(server_sock, SHUT_RDWR);
         close(server_sock);
-    if (client_sock != -1)
+	}
+    if (client_sock != -1) {
+        shutdown(client_sock, SHUT_RDWR);
         close(client_sock);
+	}
     return NULL;
 }
 
@@ -1071,10 +1094,23 @@ int
 vdpy_init(int *num_vscreens)
 {
 	int err, count;
+	struct vscreen *vscr;
 
 	if (vdpy.s.n_connect) {
 		return 0;
 	}
+
+	// only support 1 physical screen now
+	vdpy.vscrs_num = 1;
+	vdpy.vscrs = calloc(VSCREEN_MAX_NUM, sizeof(struct vscreen));
+	if (!vdpy.vscrs) {
+		pr_err("%s, memory allocation for vscrs failed.", __func__);
+		return -1;
+	}
+
+	vscr = &vdpy.vscrs[0];
+	vscr->is_fullscreen = false;
+	vscr->pscreen_id = 0;
 
 	/* start one vdpy_sdl_display_thread to handle the 3D request
 	 * in this dedicated thread. Otherwise the libSDL + 3D doesn't
