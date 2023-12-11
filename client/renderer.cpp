@@ -4,6 +4,7 @@ extern "C"
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
+#include <unistd.h>
 }
 
 #include "renderer.h"
@@ -58,7 +59,7 @@ int Renderer::init(NativeWindowType window)
 	EGLConfig myConfig;
 	int w, h;
 
-	LOGD("%s", __func__);
+	LOGD("%s()", __func__);
 	// only support 1 physical screen now
 
 	// create egl surface from native window
@@ -208,9 +209,27 @@ void Renderer::terminate()
 	gl_ctx.eglSurface = EGL_NO_SURFACE;
 }
 
+int Renderer::makeCurrent()
+{
+	EGLBoolean returnValue;
+
+	LOGI("%s\n", __func__);
+	while (!initialized) {
+		usleep(500000);
+	}
+
+	returnValue = eglMakeCurrent(gl_ctx.eglDisplay, gl_ctx.eglSurface, gl_ctx.eglSurface, gl_ctx.eglContext);
+	checkEglError("eglMakeCurrent");
+	// checkEglError("eglMakeCurrent", returnValue);
+	if (returnValue != EGL_TRUE) {
+		LOGE("eglMakeCurrent failed.\n");
+		return -1;
+	}
+	return 0;
+}
+
 void Renderer::draw()
 {
-
 }
 
 void Renderer::vdpy_surface_set(struct surface *surf)

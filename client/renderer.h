@@ -45,6 +45,8 @@ public:
 
     int init(NativeWindowType window);
     void terminate();
+    int makeCurrent();
+
     void draw();
     void vdpy_surface_set(struct surface *surf);
     void vdpy_set_modifier(uint64_t modifier);

@@ -6,6 +6,7 @@ extern "C"
 #include <errno.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -16,8 +17,8 @@ extern "C"
 
 #include "common.h"
 
-#define SERVER_SOCK_PATH  "/data/virt_disp_server"
-#define CLIENT_SOCK_PATH  "/data/virt_disp_client"
+#define SERVER_SOCK_PATH  "/data/local/ipc/virt_disp_server"
+#define CLIENT_SOCK_PATH  "/data/local/ipc/virt_disp_client"
 
 DisplayClient::DisplayClient(Renderer * rd) : client_sock(-1), is_connected(false), renderer(rd)
 {}
@@ -29,7 +30,7 @@ int DisplayClient::start()
 
     client_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sock == -1) {
-        LOGE("SOCKET ERROR = %d\n", errno);
+        LOGE("SOCKET ERROR = %s\n", strerror(errno));
         return -1;
     }
 
@@ -38,23 +39,34 @@ int DisplayClient::start()
     strcpy(client_sockaddr.sun_path, CLIENT_SOCK_PATH); 
     len = sizeof(client_sockaddr);
     
-    unlink(CLIENT_SOCK_PATH);
+    ::unlink(CLIENT_SOCK_PATH);
     ret = ::bind(client_sock, (struct sockaddr *) &client_sockaddr, len);
     if (ret == -1){
-        LOGE("BIND ERROR: %d\n", errno);
+        LOGE("BIND ERROR: %s\n", strerror(errno));
+        shutdown(client_sock, SHUT_RDWR);
         close(client_sock);
         client_sock = -1;
         return -1;
     }
 
-    server_tid = make_shared<thread>(work_thread, this);
-    server_tid->join();
+    exit_fd = eventfd(0, 0);
+    if (exit_fd == -1)
+        LOGE("failed to create exit fd\n");
+    work_tid = make_shared<thread>(work_thread, this);
     return ret;
 }
 
 int DisplayClient::term()
 {
+    int ret, m = 0;
+    ret = write(exit_fd, &m, sizeof(m));
+    if (ret != sizeof(m))
+        LOGE("failed to write exit mesg\n");
+    work_tid->join();
+    close(exit_fd);
+
     if (client_sock != -1) {
+        shutdown(client_sock, SHUT_RDWR);
         close(client_sock);
         client_sock = -1;
     }
@@ -74,7 +86,7 @@ int DisplayClient::connect()
     len = sizeof(server_sockaddr);
     ret = ::connect(client_sock, (struct sockaddr *) &server_sockaddr, len);
     if(ret == -1){
-        LOGE("CONNECT ERROR = %d\n", errno);
+        LOGE("CONNECT ERROR = %s\n", strerror(errno));
     } else {
         is_connected = true;
         LOGI("CONNECT OK! ret = %d\n", ret);
@@ -91,7 +103,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
 
     int epollfd = epoll_create1 (0);
     if (epollfd == -1) {
-        perror ("epoll_create1");
+        LOGE ("epoll_create1");
         return NULL;
     }
 
@@ -100,40 +112,54 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
     event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
     event.data.fd = cur_ctx->client_sock;
     if (epoll_ctl (epollfd, EPOLL_CTL_ADD, cur_ctx->client_sock, &event) == -1) {
-        perror ("epoll_ctl");
-        exit (EXIT_FAILURE);
+        LOGE ("epoll_ctl");
+        return NULL;
     }
+
+    if (cur_ctx->renderer)
+        cur_ctx->renderer->makeCurrent();
 
     while (true) {
         if (!cur_ctx->is_connected) {
             cur_ctx->connect();
+            usleep(500000);
             continue;
         }
 
+	LOGI("%s() -epoll events\n", __func__);
         // Buffer to hold events
         struct epoll_event events[5];
         int numEvents = epoll_wait (epollfd, events, 5, -1);
         if (numEvents == -1) {
-            perror ("epoll_wait");
+            LOGE ("epoll_wait");
             continue;
         }
         
+	LOGI("%s() -got %d input events\n", __func__, numEvents);
         // Process events
         for (int i = 0; i < numEvents; i++) {
             // Check if the event is for the server socket
             if (events[i].data.fd != cur_ctx->client_sock) {
+                if (events[i].data.fd == cur_ctx->exit_fd) {
+	                LOGI("%s() -exit!\n", __func__);
+                    break;
+                }
+	            LOGE("%s() -client socket fd wrong!\n", __func__);
                 continue;
             }
 
+            LOGI("event value: 0x%x", events[i].events);
             if (!(events[i].events & EPOLLIN)) {
                 LOGE("poll client error: 0x%x", events[i].events);
                 continue;
             }
             
-            while ((ret = ::recv(cur_ctx->client_sock, &msg_header, sizeof(msg_header), 0) ) > 0) {
-                if (ret != sizeof(msg_header)) {
+            do {
+                ret = ::recv(cur_ctx->client_sock, &msg_header, sizeof(msg_header), 0);
+                if ((ret <= 0) || (ret != sizeof(msg_header))) {
                     LOGE("recv event header fail (%d vs. 0x%lx)!", ret, (unsigned long)sizeof(msg_header));
-                    continue;
+                    while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
+                    break;
                 }
                 
                 if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
@@ -144,9 +170,13 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                 }
 
                 ret = ::recv(cur_ctx->client_sock, &buf, msg_header.e_size, 0);
-                if (ret != msg_header.e_size)
+                if (ret != msg_header.e_size) {
                     LOGE("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
+                    while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
+                    break;
+                }
 
+                LOGI("got event type: 0x%x", msg_header.e_type);
                 switch (msg_header.e_type) {
                     case DPY_EVENT_SURFACE_SET:
                     {
@@ -172,7 +202,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     default:
                         break;
                 }
-            }
+            } while(true);
         }
     }
 }

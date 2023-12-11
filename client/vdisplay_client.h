@@ -20,7 +20,9 @@ private:
     static void * work_thread(DisplayClient *cur_ctx);
     int client_sock;
     bool is_connected;
-	shared_ptr<thread> server_tid;
+
+    int exit_fd;
+    shared_ptr<thread> work_tid;
 
     Renderer *renderer;
 };
