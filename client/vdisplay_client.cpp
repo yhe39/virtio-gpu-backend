@@ -169,19 +169,34 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     break;
                 }
 
-                ret = ::recv(cur_ctx->client_sock, &buf, msg_header.e_size, 0);
-                if (ret != msg_header.e_size) {
-                    LOGE("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
-                    while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
-                    break;
+                if (msg_header.e_size > 0) {
+                    ret = ::recv(cur_ctx->client_sock, &buf, msg_header.e_size, 0);
+                    if (ret != msg_header.e_size) {
+                        LOGE("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
+                        while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
+                        break;
+                    }
                 }
 
                 LOGI("got event type: 0x%x", msg_header.e_type);
                 switch (msg_header.e_type) {
                     case DPY_EVENT_SURFACE_SET:
                     {
+                        struct surface * surf = (struct surface *)buf;
+                        ret = recv_fd(cur_ctx->client_sock, &surf->dma_info.dmabuf_fd);
+                        if (ret < 0) {
+                            LOGE("recv_fd failed! (ret=%d)", ret);
+                            break;
+                        }
+
                         if (cur_ctx->renderer)
-                            cur_ctx->renderer->vdpy_surface_set((struct surface *)buf);
+                            cur_ctx->renderer->vdpy_surface_set(surf);
+                        break;
+                    }
+                    case DPY_EVENT_SURFACE_UPDATE:
+                    {
+                        if (cur_ctx->renderer)
+                            cur_ctx->renderer->vdpy_surface_update();
                         break;
                     }
                     case DPY_EVENT_SET_MODIFIER:
@@ -205,4 +220,43 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             } while(true);
         }
     }
+}
+
+int DisplayClient::recv_fd(int sock_fd, int *fd)
+{
+    ssize_t ret;
+    struct msghdr msg = {};
+    int rdata[4] = {0};
+    struct iovec vec;
+    char cmsgbuf[CMSG_SPACE(sizeof(int))];
+    struct cmsghdr *cmptr;
+
+    vec.iov_base = rdata;
+    vec.iov_len = 16;
+    msg.msg_iov = &vec;
+    msg.msg_iovlen = 1;
+    msg.msg_control = cmsgbuf;
+    msg.msg_controllen = sizeof(cmsgbuf);
+
+    ret = ::recvmsg(sock_fd, &msg, MSG_WAITALL);
+    if (ret < 0) {
+        LOGE("recvmsg() ret < 0\n");
+        return -1;
+    }
+
+    cmptr = CMSG_FIRSTHDR(&msg);
+    if (cmptr == NULL) {
+        LOGE("recvmsg() no cmsg hdr\n");
+        return -1;
+    }
+
+    if ((cmptr->cmsg_len != CMSG_LEN(sizeof(int)))
+        || (cmptr->cmsg_level != SOL_SOCKET)
+        || (cmptr->cmsg_type != SCM_RIGHTS)) {
+        LOGE("recvmsg() cmsg error\n");
+        return -1;
+    }
+
+    *fd = *((int*)CMSG_DATA(cmptr));
+    return 0;
 }

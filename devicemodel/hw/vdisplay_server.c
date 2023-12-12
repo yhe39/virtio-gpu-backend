@@ -804,12 +804,12 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 			break;
 		}
 ///////////////////////////////////////
-		pr_info("--yue-- loop in SDL display thread\n");
+//		pr_info("--yue-- loop in SDL display thread\n");
 		if (triger != NULL) {
-			pr_info("--yue-- trigger_data\n");
+//			pr_info("--yue-- trigger_data\n");
 			(*triger)(triger_data);
 		} else {
-			pr_info("--yue-- trigger is NULL!\n");
+//			pr_info("--yue-- trigger is NULL!\n");
 		}
 ///////////////////////////////////
 		pthread_mutex_lock(&vdpy.vdisplay_mutex);
@@ -902,23 +902,59 @@ static inline int client_send(int e_type, void *data, int len)
     int ret;
     struct dpy_evt_header evt_hdr;
 
-    if (client_sock != -1) {
-        evt_hdr.e_type = e_type;
-        evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
-        evt_hdr.e_size = len;
-        ret = send(client_sock, &evt_hdr, sizeof(evt_hdr), 0);
-        if (ret != sizeof(evt_hdr)) {
-            pr_err("%s() send header fail(%d vs. %d)", __func__, ret, sizeof(evt_hdr));
-            return -1;
-        }
-
-        ret = send(client_sock, data, len, 0);
-        if (ret != len) {
-            pr_err("%s() send body fail(%d vs. %d)", __func__, ret, len);
-            return -1;
-        }
+    if (client_sock == -1) {
+		return -1;
     }
+
+	evt_hdr.e_type = e_type;
+	evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
+	evt_hdr.e_size = len;
+	ret = send(client_sock, &evt_hdr, sizeof(evt_hdr), 0);
+	if (ret != sizeof(evt_hdr)) {
+		pr_err("%s() send header fail(%d vs. %d)", __func__, ret, sizeof(evt_hdr));
+		return -1;
+	}
+
+	if (data && (len > 0)) {
+		ret = send(client_sock, data, len, 0);
+		if (ret != len) {
+			pr_err("%s() send body fail(%d vs. %d)", __func__, ret, len);
+			return -1;
+		}
+	}
     return 0;
+}
+
+static inline int client_send_fd(int fd)
+{
+    int ret;
+	struct msghdr msg = {};
+	int rdata[4] = {0};
+	struct iovec vec;
+	char cmsgbuf[CMSG_SPACE(sizeof(int))];
+	struct cmsghdr *cmptr;
+
+    if (client_sock == -1) {
+		return -1;
+    }
+
+	vec.iov_base = rdata;
+	vec.iov_len = 16;
+	msg.msg_iov = &vec;
+	msg.msg_iovlen = 1;
+	msg.msg_control = cmsgbuf;
+	msg.msg_controllen = sizeof(cmsgbuf);
+
+	cmptr = CMSG_FIRSTHDR(&msg);
+	cmptr->cmsg_len = CMSG_LEN(sizeof(int));
+	cmptr->cmsg_level = SOL_SOCKET;
+	cmptr->cmsg_type = SCM_RIGHTS;
+	*((int*)CMSG_DATA(cmptr)) = fd;
+	ret = sendmsg(client_sock, &msg, 0);
+	if (ret <= 0) {
+		pr_err("%s() sendmsg fail(ret=%d)", __func__, ret);
+	}
+	return ret;
 }
 
 static void *
@@ -999,7 +1035,7 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 pr_err("Client connected!\n");
                 
                 // Close previous client connect, and remove listener
-                if (client_sock != -1) {
+                if (client_sock == -1) {
 	pr_info("%s() -4.0\n", __func__);
                     event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
                     event.data.fd = client_sock;
@@ -1149,22 +1185,35 @@ vdpy_init(int *num_vscreens)
 	return vdpy.s.n_connect;
 }
 
-void vdpy_surface_set(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf)
+void vdpy_surface_set(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf __attribute__((unused)))
 {
+    pr_err("%s ---yue", __func__);
     if (!surf || (surf->surf_type != SURFACE_DMABUF)) {
         pr_err("%s Only dma buf is supported!", __func__);
         return;
     }
 
     pthread_mutex_lock(&vdpy.client_mutex);
+    pr_err("before send clinet\n");
     client_send(DPY_EVENT_SURFACE_SET, surf, sizeof(struct surface));
+    client_send_fd(surf->dma_info.dmabuf_fd);
+    pr_err("after send clinet\n");
     pthread_mutex_unlock(&vdpy.client_mutex);
 }
 
-void vdpy_surface_update(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf __attribute__((unused)))
+void vdpy_surface_update(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf)
 {
-    // all action done in vdpy_surface_set(), check whether need this func later
-    return;
+    pr_err("%s ---yue", __func__);
+    if (!surf || (surf->surf_type != SURFACE_DMABUF)) {
+        pr_err("%s Only dma buf is supported!", __func__);
+        return;
+    }
+
+    pthread_mutex_lock(&vdpy.client_mutex);
+    pr_err("before send clinet\n");
+    client_send(DPY_EVENT_SURFACE_UPDATE, NULL, 0);
+    pr_err("after send clinet\n");
+    pthread_mutex_unlock(&vdpy.client_mutex);
 }
 
 void

@@ -17,6 +17,7 @@ public:
 
 private:
 
+    static int recv_fd(int sock_fd, int *fd);
     static void * work_thread(DisplayClient *cur_ctx);
     int client_sock;
     bool is_connected;
