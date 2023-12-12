@@ -55,6 +55,11 @@ static struct virtio_backend_info virtio_gpu_info = {
 };
 #endif
 
+struct engine_user_data {
+    Renderer * renderer;
+    DisplayClient * v_client;
+};
+
 namespace {
 int animating = 0;
 
@@ -72,8 +77,10 @@ int32_t engine_handle_input(struct android_app*, AInputEvent* event) {
 /**
  * Process the next main command.
  */
-void engine_handle_cmd(struct android_app* app, int32_t cmd) {    
-    Renderer *renderer = (Renderer *)(app->userData);
+void engine_handle_cmd(struct android_app* app, int32_t cmd) {
+    struct engine_user_data *user_data = (struct engine_user_data *)(app->userData);
+    Renderer *renderer = user_data->renderer;
+    DisplayClient *display_client = user_data->v_client;
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
             // We are not saving the state.
@@ -93,13 +100,14 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 #endif
 
                 animating = 1;
+                display_client->hotplug(1);
             }
             LOGI("APP_CMD_INIT_WINDOW -2");
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
 #ifdef USE_GAME_RENDER
-            renderer->terminate();
+//            renderer->terminate();
 #else
             close_backend_thread();
 #endif
@@ -113,6 +121,22 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 #ifdef USE_GAME_RENDER
             renderer->draw();
 #endif
+            break;
+	case APP_CMD_START:
+            LOGI("APP_CMD_START");
+	    break;
+	case APP_CMD_RESUME:
+            LOGI("APP_CMD_RESUME");
+	    break;
+	case APP_CMD_INPUT_CHANGED:
+            LOGI("APP_CMD_INPUT_CHANGED");
+	    break;
+	case APP_CMD_PAUSE:
+            LOGI("APP_CMD_PAUSE");	
+	    break;
+	case APP_CMD_STOP:
+	    LOGI("APP_CMD_STOP");
+//	    display_client->hotplug(1);
             break;
         default:
             LOGI("APP_CMD %d", cmd);
@@ -136,7 +160,8 @@ void android_main(struct android_app* state) {
     std::unique_ptr<DisplayClient> display_client(new DisplayClient(renderer.get()));
     display_client->start();
 
-    state->userData = renderer.get();
+    struct engine_user_data user_data = {renderer.get(), display_client.get()};
+    state->userData = &user_data;
     state->onAppCmd = engine_handle_cmd;
     state->onInputEvent = engine_handle_input;
 

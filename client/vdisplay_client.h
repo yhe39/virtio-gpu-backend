@@ -3,6 +3,7 @@
 
 #include "renderer.h"
 
+#include <mutex>
 #include <thread>
 
 using namespace std;
@@ -14,6 +15,7 @@ public:
     int term();
 
     int connect();
+    int hotplug(int in);
 
 private:
 
@@ -21,6 +23,7 @@ private:
     static void * work_thread(DisplayClient *cur_ctx);
     int client_sock;
     bool is_connected;
+    std::mutex sock_mtx;
 
     int exit_fd;
     shared_ptr<thread> work_tid;
