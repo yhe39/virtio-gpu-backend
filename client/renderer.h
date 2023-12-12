@@ -49,6 +49,7 @@ public:
 
     void draw();
     void vdpy_surface_set(struct surface *surf);
+    void vdpy_surface_update();
     void vdpy_set_modifier(uint64_t modifier);
 private:
     typedef struct{

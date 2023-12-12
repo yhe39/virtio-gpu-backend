@@ -180,6 +180,11 @@ int Renderer::init(NativeWindowType window)
 
 void Renderer::terminate()
 {
+	if (gl_ctx.cur_surf.dma_info.dmabuf_fd != 0) {
+		close(gl_ctx.cur_surf.dma_info.dmabuf_fd);
+		gl_ctx.cur_surf.dma_info.dmabuf_fd = 0;
+	}
+
 	// Delete program object
 	if (gl_ctx.programObjectExternal) {
 		glDeleteProgram(gl_ctx.programObjectExternal);
@@ -236,6 +241,7 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 {
 	// int format;
 	int i;
+	char tmp[256]={};
 
 	// if (vdpy.tid != pthread_self()) {
 	// 	LOGE("%s: unexpected code path as unsafe 3D ops in multi-threads env.\n",
@@ -249,6 +255,8 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		return;
 
 	if (surf->surf_type == SURFACE_DMABUF) {
+		if (gl_ctx.cur_surf.dma_info.dmabuf_fd != 0)
+			close(gl_ctx.cur_surf.dma_info.dmabuf_fd);
 		gl_ctx.cur_surf = *surf;
 	} else {
 		/* Unsupported type */
@@ -282,7 +290,11 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		attrs[i++] = surf->stride;
 		attrs[i++] = EGL_DMA_BUF_PLANE0_OFFSET_EXT;
 		attrs[i++] = surf->dma_info.dmabuf_offset;
+		LOGI("--yue, EGL_WIDTH is %x, surf->width is %x, EGL_HEIGHT is %x, surf->height is %x\n", EGL_WIDTH, surf->width, EGL_HEIGHT, surf->height);
+		LOGI("--yue EGL_LINUX_DRM_FOURCC_EXT is %x, dma_info.surf_fourcc is %x, EGL_DMA_BUF_PLANE0_FD_EXT is %x, dma_info.dmabuf_fd is %x\n", EGL_LINUX_DRM_FOURCC_EXT, surf->dma_info.surf_fourcc, EGL_DMA_BUF_PLANE0_FD_EXT, surf->dma_info.dmabuf_fd);
+		LOGI("--yue EGL_DMA_BUF_PLANE0_PITCH_EXT is %x, surf->stride is %x, EGL_DMA_BUF_PLANE0_OFFSET_EXT is %x, surf->dma_info.dmabuf_offset is %x\n", EGL_DMA_BUF_PLANE0_PITCH_EXT, surf->stride, EGL_DMA_BUF_PLANE0_OFFSET_EXT, surf->dma_info.dmabuf_offset);
 		if (gl_ctx.modifier) {
+			LOGI("--yue, has modifier\n");
 			attrs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
 			attrs[i++] = gl_ctx.modifier & 0xffffffff;
 			attrs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
@@ -290,15 +302,19 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		}
 		attrs[i++] = EGL_NONE;
 
+		for(i=0; i<17; i++)
+			snprintf(tmp, 255, "%s 0x%x", tmp, attrs[i]);
+		LOGI("eglCreateImageKHR attrs=(%s)\n", tmp);
+
 		egl_img = gl_ops.eglCreateImageKHR(gl_ctx.eglDisplay,
 				EGL_NO_CONTEXT,
 				EGL_LINUX_DMA_BUF_EXT,
 				NULL, attrs);
+		checkEglError("eglCreateImageKHR");
 		if (egl_img == EGL_NO_IMAGE_KHR) {
 			LOGE("Failed in eglCreateImageKHR.\n");
 			return;
 		}
-		checkEglError("eglCreateImageKHR");
 
 		// SDL_GL_BindTexture(gl_ctx.surf_tex, NULL, NULL);
 		glBindTexture(GL_TEXTURE_EXTERNAL_OES, gl_ctx.surf_tex);
@@ -314,13 +330,20 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		 * Now it is released next time so that it is controlled correctly
 		 */
 		gl_ctx.egl_img = egl_img;
-
-		egl_render_copy(gl_ctx.surf_tex, NULL, true);
 	}
 
-	eglSwapBuffers(gl_ctx.eglDisplay, gl_ctx.eglSurface);
-
 	LOGI("%s -2\n", __func__);
+}
+
+void Renderer::vdpy_surface_update()
+{
+	if (!initialized)
+		return;
+
+	if (gl_ctx.surf_tex)
+		egl_render_copy(gl_ctx.surf_tex, NULL, true);
+
+	eglSwapBuffers(gl_ctx.eglDisplay, gl_ctx.eglSurface);
 }
 
 void Renderer::vdpy_set_modifier(uint64_t modifier)

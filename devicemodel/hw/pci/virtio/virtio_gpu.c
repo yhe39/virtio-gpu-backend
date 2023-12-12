@@ -1098,6 +1098,7 @@ virtio_gpu_scanout_needs_flush(struct virtio_gpu *gpu,
 static void
 virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 {
+	pr_err("--yue-- %s\n", __func__);
 	struct virtio_gpu_resource_flush req;
 	struct virtio_gpu_ctrl_hdr resp;
 	struct virtio_gpu_resource_2d *r2d;
@@ -1121,15 +1122,18 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 		memcpy(cmd->iov[1].iov_base, &resp, sizeof(resp));
 		return;
 	}
+	pr_err("--yue-- before if r2d->blob\n");
 	if (r2d->blob) {
+		pr_err("--yue--in the if r2d->blob\n");
 		virtio_gpu_dmabuf_ref(r2d->dma_info);
 		for (i = 0; i < gpu->scanout_num; i++) {
 			if (!virtio_gpu_scanout_needs_flush(gpu, i, req.resource_id, &req.r))
 				continue;
-
+			pr_err("--yue-- before call vdpy_surface_update\n");
 			surf.dma_info.dmabuf_fd = r2d->dma_info->dmabuf_fd;
 			surf.surf_type = SURFACE_DMABUF;
 			vdpy_surface_update(gpu->vdpy_handle, i, &surf);
+			pr_err("--yue-- after call vdpy_surface_update\n");
 		}
 		virtio_gpu_dmabuf_unref(r2d->dma_info);
 		resp.type = VIRTIO_GPU_RESP_OK_NODATA;
@@ -1141,7 +1145,7 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 	for (i = 0; i < gpu->scanout_num; i++) {
 		if (!virtio_gpu_scanout_needs_flush(gpu, i, req.resource_id, &req.r))
 			continue;
-
+		pr_err("--yue-- 11111\n");
 		gpu_scanout = gpu->gpu_scanouts + i;
 		surf.pixel = pixman_image_get_data(r2d->image);
 		surf.x = gpu_scanout->scanout_rect.x;
@@ -1153,6 +1157,7 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 		surf.surf_type = SURFACE_PIXMAN;
 		surf.pixel = (char*)surf.pixel + bytes_pp * surf.x + surf.y * surf.stride;
 		vdpy_surface_update(gpu->vdpy_handle, i, &surf);
+		pr_err("--yue-- after 1111\n");
 	}
 	pixman_image_unref(r2d->image);
 
@@ -1476,12 +1481,12 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_command *cmd)
 bool hotplug_trigered = false;
 void triger_hotplug(void *data)
 {
-	pr_dbg("%s ---yue-- \n", __func__);
+//	pr_dbg("%s ---yue-- \n", __func__);
         const char* command = "getprop hotplug.ivshmem.display";
         FILE* file = popen(command, "r");
 
         if (!file) {
-                pr_dbg("%s ---yue--  failed to start getprop!", __func__);
+//                pr_dbg("%s ---yue--  failed to start getprop!", __func__);
                 return;
         }
         char value[128];
@@ -1491,31 +1496,31 @@ void triger_hotplug(void *data)
                 if (value[0] != '\0' && value[0] != '\n') {
                         value[strcspn(value, "\r\n")] = '\0';
                         if (strcmp(value, "1") == 0) {
-                                pr_dbg("--yue-- property value is 1");
+//                                pr_dbg("--yue-- property value is 1");
 				struct virtio_gpu *gpu = (struct virtio_gpu *)data;
 
 				if (!hotplug_trigered) {
-					pr_dbg("---yue-- trigger hotplug event once \n");
+//					pr_dbg("---yue-- trigger hotplug event once \n");
 					hotplug_trigered = true;
 					gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
 					//write_config(&gpu->base,0,4);
 					virtio_config_changed(&gpu->base);
 				} else {
-					pr_dbg("---yue-- trigered. no opertion \n");
+//					pr_dbg("---yue-- trigered. no opertion \n");
 				}
                             } else if (strcmp(value, "0") == 0) {
-                                pr_dbg("--yue-- property value is 0");
+//                                pr_dbg("--yue-- property value is 0");
                                 hotplug_trigered = false;
-				pr_dbg("--yue-- reset hotplug_trigered\n");
+//				pr_dbg("--yue-- reset hotplug_trigered\n");
                         } else {
-                                pr_dbg("--yue-- property value is neither 0 nor 1: %s", value);
-				pr_dbg("--yue-- property value: %s", value);
+//                                pr_dbg("--yue-- property value is neither 0 nor 1: %s", value);
+//				pr_dbg("--yue-- property value: %s", value);
                         }
                 } else {
-                        pr_dbg("--yue-- property value is empty.\n");
+//                        pr_dbg("--yue-- property value is empty.\n");
                 }
         } else {
-                pr_dbg("--yue-- failed to read property value.\n");
+//                pr_dbg("--yue-- failed to read property value.\n");
         }
 	pclose(file);
 }
@@ -1741,7 +1746,7 @@ virtio_gpu_vga_bh(void *param)
 		gpu->vga.surf.surf_type = SURFACE_PIXMAN;
 		vdpy_surface_set(gpu->vdpy_handle, 0, &gpu->vga.surf);
 	}
-
+	pr_err("%s: --yue--\n", __func__);	
 	vdpy_surface_update(gpu->vdpy_handle, 0, &gpu->vga.surf);
 }
 
