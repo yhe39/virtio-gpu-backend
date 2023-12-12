@@ -95,6 +95,32 @@ int DisplayClient::connect()
     return ret;
 }
 
+int DisplayClient::hotplug(int in)
+{
+    LOGI("--yue-- hotplug\n");
+    int ret;
+    struct dpy_evt_header evt_hdr;
+    std::unique_lock<mutex> lk(sock_mtx);
+
+    if (client_sock != -1) {
+        evt_hdr.e_type = DPY_EVENT_HOTPLUG;
+        evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
+        evt_hdr.e_size = sizeof(in);
+        ret = send(client_sock, &evt_hdr, sizeof(evt_hdr), 0);
+        if (ret != sizeof(evt_hdr)) {
+            LOGE("%s() send header fail(%d vs. 0x%lx)", __func__, ret, (unsigned long)sizeof(evt_hdr));
+            return -1;
+        }
+
+        ret = send(client_sock, &in, sizeof(in), 0);
+        if (ret != sizeof(in)) {
+            LOGE("%s() send body fail(%d vs. 0x%lx)", __func__, ret, (unsigned long)sizeof(in));
+            return -1;
+        }
+    }
+    return 0;    
+}
+
 void * DisplayClient::work_thread(DisplayClient *cur_ctx)
 {
     int ret;
@@ -155,6 +181,8 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             }
             
             do {
+                std::unique_lock<mutex> lk(cur_ctx->sock_mtx);
+
                 ret = ::recv(cur_ctx->client_sock, &msg_header, sizeof(msg_header), 0);
                 if ((ret <= 0) || (ret != sizeof(msg_header))) {
                     LOGE("recv event header fail (%d vs. 0x%lx)!", ret, (unsigned long)sizeof(msg_header));
@@ -188,6 +216,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                             LOGE("recv_fd failed! (ret=%d)", ret);
                             break;
                         }
+                        lk.unlock();
 
                         if (cur_ctx->renderer)
                             cur_ctx->renderer->vdpy_surface_set(surf);
@@ -195,12 +224,16 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     }
                     case DPY_EVENT_SURFACE_UPDATE:
                     {
+                        lk.unlock();
+
                         if (cur_ctx->renderer)
                             cur_ctx->renderer->vdpy_surface_update();
                         break;
                     }
                     case DPY_EVENT_SET_MODIFIER:
                     {
+                        lk.unlock();
+
                         if (cur_ctx->renderer)
                             cur_ctx->renderer->vdpy_set_modifier(*(uint64_t *)buf);
                         break;
@@ -215,6 +248,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     //     break;
                     // }
                     default:
+                        lk.unlock();
                         break;
                 }
             } while(true);

@@ -23,8 +23,8 @@
 
 #define VDPY_MAX_WIDTH 3840
 #define VDPY_MAX_HEIGHT 2160
-#define VDPY_DEFAULT_WIDTH 1024
-#define VDPY_DEFAULT_HEIGHT 768
+#define VDPY_DEFAULT_WIDTH 1920
+#define VDPY_DEFAULT_HEIGHT 1080
 #define VDPY_MIN_WIDTH 640
 #define VDPY_MIN_HEIGHT 480
 #define transto_10bits(color) (uint16_t)(color * 1024 + 0.5)
@@ -745,6 +745,15 @@ void triger_init(void (*func)(void *data), void *data)
 	triger = func;
 }
 
+static void *triger_data1;
+void (*triger1)(void *data1);
+
+void triger_init1(void (*func1)(void *data1), void *data1)
+{
+	triger_data1 = data1;
+	triger1 = func1;
+}
+
 static void *
 vdpy_sdl_display_thread(void *data __attribute__((unused)))
 {
@@ -805,9 +814,9 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 		}
 ///////////////////////////////////////
 //		pr_info("--yue-- loop in SDL display thread\n");
-		if (triger != NULL) {
+		if (triger1 != NULL) {
 //			pr_info("--yue-- trigger_data\n");
-			(*triger)(triger_data);
+			(*triger1)(triger_data1);
 		} else {
 //			pr_info("--yue-- trigger is NULL!\n");
 		}
@@ -1033,6 +1042,12 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 len = sizeof (client_sockaddr);
                 new_client_sock = accept (server_sock, (struct sockaddr*)&client_sockaddr, &len);
                 pr_err("Client connected!\n");
+		if (triger != NULL) {
+		        pr_info("--yue-- trigger hp\n");
+		        (*triger)(triger_data);
+		} else {
+		        pr_info("--yue-- trigger is NULL!\n");
+		}
                 
                 // Close previous client connect, and remove listener
                 if (client_sock == -1) {
@@ -1082,11 +1097,13 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 					}
 
 	pr_info("%s() -5.3\n", __func__);
-					ret = recv(client_sock, &buf, msg_header.e_size, 0);
-					if (ret != msg_header.e_size) {
-						pr_err("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
-						while (recv(client_sock, &buf, 256, 0) > 0);
-						break;
+					if (msg_header.e_size > 0) {
+						ret = recv(client_sock, &buf, msg_header.e_size, 0);
+						if (ret != msg_header.e_size) {
+							pr_err("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
+							while (recv(client_sock, &buf, 256, 0) > 0);
+							break;
+						}
 					}
 
 	pr_info("%s() -5.4\n", __func__);
@@ -1098,6 +1115,18 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 							vscr->info.yoff = info->yoff;
 							vscr->info.width = info->width;
 							vscr->info.height = info->height;
+							break;
+						}
+						case DPY_EVENT_HOTPLUG:
+						{
+							int is_in = *(int *)buf;
+							pr_err("--yue-- hotplug event -%d\n", is_in);
+							if (triger != NULL) {
+							        pr_info("--yue-- trigger hp\n");
+							        (*triger)(triger_data);
+							} else {
+							        pr_info("--yue-- trigger is NULL!\n");
+							}
 							break;
 						}
 						default:

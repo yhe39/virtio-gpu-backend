@@ -1478,8 +1478,17 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_command *cmd)
 	virtio_gpu_dmabuf_unref(r2d->dma_info);
 	return;
 }
-bool hotplug_trigered = false;
 void triger_hotplug(void *data)
+{
+	pr_dbg("%s ---yue-- hot plug to hwc\n", __func__);
+	struct virtio_gpu *gpu = (struct virtio_gpu *)data;
+	gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
+	//write_config(&gpu->base,0,4);
+	virtio_config_changed(&gpu->base);
+}
+
+bool hotplug_trigered = false;
+void triger_hotplug1(void *data)
 {
 //	pr_dbg("%s ---yue-- \n", __func__);
         const char* command = "getprop hotplug.ivshmem.display";
@@ -1500,7 +1509,7 @@ void triger_hotplug(void *data)
 				struct virtio_gpu *gpu = (struct virtio_gpu *)data;
 
 				if (!hotplug_trigered) {
-//					pr_dbg("---yue-- trigger hotplug event once \n");
+					pr_dbg("---yue-- trigger hotplug event once \n");
 					hotplug_trigered = true;
 					gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
 					//write_config(&gpu->base,0,4);
@@ -1511,7 +1520,7 @@ void triger_hotplug(void *data)
                             } else if (strcmp(value, "0") == 0) {
 //                                pr_dbg("--yue-- property value is 0");
                                 hotplug_trigered = false;
-//				pr_dbg("--yue-- reset hotplug_trigered\n");
+				pr_dbg("--yue-- reset hotplug_trigered\n");
                         } else {
 //                                pr_dbg("--yue-- property value is neither 0 nor 1: %s", value);
 //				pr_dbg("--yue-- property value: %s", value);
@@ -1836,6 +1845,7 @@ virtio_gpu_init(struct vmctx *ctx, struct pci_vdev *dev, char *opts __attribute_
 	gpu->vdpy_handle = vdpy_init(&gpu->scanout_num);
 
 	triger_init(triger_hotplug,gpu);
+	triger_init1(triger_hotplug1,gpu);
 
 	gpu->base.mtx = &gpu->mtx;
 	gpu->base.device_caps = VIRTIO_GPU_S_HOSTCAPS;

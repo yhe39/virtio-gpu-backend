@@ -115,8 +115,8 @@ int Renderer::init(NativeWindowType window)
 	checkEglError("eglQuerySurface0");
 	eglQuerySurface(gl_ctx.eglDisplay, gl_ctx.eglSurface, EGL_HEIGHT, &h);
 	checkEglError("eglQuerySurface1");
-	w = 0x400;
-	h = 0x300;
+//	w = 0x780;
+//	h = 0x438;
 	gl_ctx.width = w;
 	gl_ctx.height = h;
 	LOGI("%s (gl_ctx.eglDisplay/gl_ctx.eglSurface)=0x%lx/0x%lx w/h=%d/%d\n",
@@ -180,6 +180,8 @@ int Renderer::init(NativeWindowType window)
 
 void Renderer::terminate()
 {
+	initialized = false;
+
 	if (gl_ctx.cur_surf.dma_info.dmabuf_fd != 0) {
 		close(gl_ctx.cur_surf.dma_info.dmabuf_fd);
 		gl_ctx.cur_surf.dma_info.dmabuf_fd = 0;
@@ -251,9 +253,6 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 
 	LOGI("%s -1\n", __func__);
 
-	if (!initialized)
-		return;
-
 	if (surf->surf_type == SURFACE_DMABUF) {
 		if (gl_ctx.cur_surf.dma_info.dmabuf_fd != 0)
 			close(gl_ctx.cur_surf.dma_info.dmabuf_fd);
@@ -262,6 +261,9 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		/* Unsupported type */
 		return;
 	}
+
+	if (!initialized)
+		return;
 
 	if (gl_ctx.surf_tex) {
 		// SDL_DestroyTexture(gl_ctx.surf_tex);
