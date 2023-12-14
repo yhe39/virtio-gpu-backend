@@ -20,7 +20,7 @@ extern "C"
 #define SERVER_SOCK_PATH  "/data/local/ipc/virt_disp_server"
 #define CLIENT_SOCK_PATH  "/data/local/ipc/virt_disp_client"
 
-DisplayClient::DisplayClient(Renderer * rd) : client_sock(-1), is_connected(false), renderer(rd)
+DisplayClient::DisplayClient(Renderer * rd) : client_sock(-1), force_exit(false), renderer(rd)
 {}
 
 int DisplayClient::start()
@@ -49,19 +49,25 @@ int DisplayClient::start()
         return -1;
     }
 
+    force_exit = false;
     exit_fd = eventfd(0, 0);
-    if (exit_fd == -1)
+    if (exit_fd == -1) {
         LOGE("failed to create exit fd\n");
+        return -1;
+    }
+
     work_tid = make_shared<thread>(work_thread, this);
     return ret;
 }
 
 int DisplayClient::term()
 {
-    int ret, m = 0;
+    int ret;
+    uint64_t m = -1;
+    force_exit = true;
     ret = write(exit_fd, &m, sizeof(m));
     if (ret != sizeof(m))
-        LOGE("failed to write exit mesg\n");
+        LOGE("failed to write exit mesg - %s\n", strerror(errno));
     work_tid->join();
     close(exit_fd);
 
@@ -88,7 +94,6 @@ int DisplayClient::connect()
     if(ret == -1){
         LOGE("CONNECT ERROR = %s\n", strerror(errno));
     } else {
-        is_connected = true;
         LOGI("CONNECT OK! ret = %d\n", ret);
     }
 
@@ -123,6 +128,7 @@ int DisplayClient::hotplug(int in)
 
 void * DisplayClient::work_thread(DisplayClient *cur_ctx)
 {
+    bool is_connected = false;
     int ret;
     struct dpy_evt_header msg_header;
     char buf[256];
@@ -133,7 +139,6 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
         return NULL;
     }
 
-    // we have to register the server socket for “epoll” events
     struct epoll_event event;
     event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
     event.data.fd = cur_ctx->client_sock;
@@ -142,15 +147,26 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
         return NULL;
     }
 
+    event.events = EPOLLIN;
+    event.data.fd = cur_ctx->exit_fd;
+    if (epoll_ctl (epollfd, EPOLL_CTL_ADD, cur_ctx->exit_fd, &event) == -1) {
+        LOGE ("epoll_ctl2");
+        return NULL;
+    }
+
     if (cur_ctx->renderer)
         cur_ctx->renderer->makeCurrent();
 
-    while (true) {
-        if (!cur_ctx->is_connected) {
-            cur_ctx->connect();
-            usleep(500000);
-            continue;
-        }
+     while (!cur_ctx->force_exit) {
+        if (!is_connected) {
+            if (cur_ctx->connect() == 0) {
+                is_connected = true;
+                cur_ctx->hotplug(1);
+            } else {
+                usleep(500000);
+                continue;
+            }
+         }
 
 	LOGI("%s() -epoll events\n", __func__);
         // Buffer to hold events
@@ -240,6 +256,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     }
                     // case DPY_EVENT_DISPLAY_INFO:
                     // {
+                    //     lk.unlock();
                     //     struct display_info *info = (struct display_info *)buf;
                     //     vscr->info.xoff = info->xoff;
                     //     vscr->info.yoff = info->yoff;
@@ -251,9 +268,11 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                         lk.unlock();
                         break;
                 }
-            } while(true);
+            } while(!cur_ctx->force_exit);
         }
     }
+    cur_ctx->hotplug(1);
+    return NULL;
 }
 
 int DisplayClient::recv_fd(int sock_fd, int *fd)

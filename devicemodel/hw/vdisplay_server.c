@@ -966,6 +966,18 @@ static inline int client_send_fd(int fd)
 	return ret;
 }
 
+static inline void close_client(int epollfd, int cs)
+{
+    struct epoll_event event;
+	event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
+	event.data.fd = cs;
+	if (epoll_ctl(epollfd, EPOLL_CTL_DEL, cs, &event) == -1) {
+		pr_err("EPOLL_CTL_DEL client %d fail!", cs);
+	}
+	shutdown(cs, SHUT_RDWR);
+	close(cs);
+}
+
 static void *
 vdpy_display_server_thread(void *data __attribute__((unused)))
 {
@@ -1035,30 +1047,25 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
         }
 
         for (int i = 0; i < numEvents; i++) {
-		    pthread_mutex_lock(&vdpy.client_mutex);
-
             if (events[i].data.fd == server_sock) {
                 // Accept incoming connection
                 len = sizeof (client_sockaddr);
                 new_client_sock = accept (server_sock, (struct sockaddr*)&client_sockaddr, &len);
                 pr_err("Client connected!\n");
+/*
 		if (triger != NULL) {
 		        pr_info("--yue-- trigger hp\n");
 		        (*triger)(triger_data);
 		} else {
 		        pr_info("--yue-- trigger is NULL!\n");
 		}
-                
+*/
                 // Close previous client connect, and remove listener
+		pthread_mutex_lock(&vdpy.client_mutex);
                 if (client_sock == -1) {
 	pr_info("%s() -4.0\n", __func__);
-                    event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
-                    event.data.fd = client_sock;
-                    if (epoll_ctl(epollfd, EPOLL_CTL_DEL, client_sock, &event) == -1) {
-                        pr_err("EPOLL_CTL_DEL client %d fail!", client_sock);
-                    }
-                    shutdown(client_sock, SHUT_RDWR);
-                    close(client_sock);
+		close_client(epollfd, client_sock);
+		client_sock = -1;
                 }
 
 	pr_info("%s() -4.1\n", __func__);
@@ -1073,19 +1080,24 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client_sock, &event) == -1) {
                     pr_err("EPOLL_CTL_ADD client %d fail!", client_sock);
                 }
+		pthread_mutex_unlock(&vdpy.client_mutex);
             } else if (events[i].data.fd == client_sock) {
 	pr_info("%s() -5.1\n", __func__);
-				if (!(events[i].events & EPOLLIN)) {
-					pr_err("poll client error: 0x%x", events[i].events);
-					continue;
-				}
-
-	pr_info("%s() -5.2\n", __func__);
+		if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+			pr_err("poll client error: 0x%x", events[i].events);
+    		pthread_mutex_lock(&vdpy.client_mutex);
+			close_client(epollfd, client_sock);
+			client_sock = -1;
+			pthread_mutex_unlock(&vdpy.client_mutex);
+			continue;
+		}
+	pr_info("%s() -5.2 - 0x%x\n", __func__, events[i].events);
 				do {
+					pthread_mutex_lock(&vdpy.client_mutex);
 					ret = recv(client_sock, &msg_header, sizeof(msg_header), 0);
 					if ((ret <= 0) || (ret != sizeof(msg_header))) {
 						pr_err("recv event header fail (%d vs. %d)!", ret, sizeof(msg_header));
-						while (recv(client_sock, &buf, 256, 0) > 0);
+						pthread_mutex_unlock(&vdpy.client_mutex);
 						break;
 					}
 
@@ -1093,6 +1105,7 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 						// data error, clear receive buffer
 						pr_err("recv data err!");
 						while (recv(client_sock, &buf, 256, 0) > 0);
+						pthread_mutex_unlock(&vdpy.client_mutex);
 						break;
 					}
 
@@ -1102,6 +1115,7 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 						if (ret != msg_header.e_size) {
 							pr_err("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
 							while (recv(client_sock, &buf, 256, 0) > 0);
+							pthread_mutex_unlock(&vdpy.client_mutex);
 							break;
 						}
 					}
@@ -1134,7 +1148,6 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 					}
 				} while (true);
             }
-		    pthread_mutex_unlock(&vdpy.client_mutex);
         }
     }
 
