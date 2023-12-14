@@ -127,12 +127,15 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 	    break;
 	case APP_CMD_RESUME:
             LOGI("APP_CMD_RESUME");
+            display_client->start();
 	    break;
 	case APP_CMD_INPUT_CHANGED:
             LOGI("APP_CMD_INPUT_CHANGED");
 	    break;
 	case APP_CMD_PAUSE:
-            LOGI("APP_CMD_PAUSE");	
+            LOGI("APP_CMD_PAUSE - 1");
+            display_client->term();
+            LOGI("APP_CMD_PAUSE - 2");
 	    break;
 	case APP_CMD_STOP:
 	    LOGI("APP_CMD_STOP");
@@ -158,7 +161,6 @@ void android_main(struct android_app* state) {
 
     std::unique_ptr<Renderer> renderer(new Renderer());
     std::unique_ptr<DisplayClient> display_client(new DisplayClient(renderer.get()));
-    display_client->start();
 
     struct engine_user_data user_data = {renderer.get(), display_client.get()};
     state->userData = &user_data;
