@@ -50,32 +50,13 @@ int DisplayClient::start()
     }
 
     force_exit = false;
-    exit_fd = eventfd(0, 0);
-    if (exit_fd == -1) {
-        LOGE("failed to create exit fd\n");
-        return -1;
-    }
-
     work_tid = make_shared<thread>(work_thread, this);
     return ret;
 }
 
 int DisplayClient::term()
 {
-    int ret;
-    uint64_t m = 1;
-    force_exit = true;
-    ret = write(exit_fd, &m, sizeof(m));
-    if (ret != sizeof(m))
-        LOGE("failed to write exit mesg - %s\n", strerror(errno));
-    work_tid->join();
-    close(exit_fd);
-
-    if (client_sock != -1) {
-        shutdown(client_sock, SHUT_RDWR);
-        close(client_sock);
-        client_sock = -1;
-    }
+    hotplug(0);
     return 0;
 }
 
@@ -147,13 +128,6 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
         return NULL;
     }
 
-    event.events = EPOLLIN;
-    event.data.fd = cur_ctx->exit_fd;
-    if (epoll_ctl (epollfd, EPOLL_CTL_ADD, cur_ctx->exit_fd, &event) == -1) {
-        LOGE ("epoll_ctl2");
-        return NULL;
-    }
-
     if (cur_ctx->renderer)
         cur_ctx->renderer->makeCurrent();
 
@@ -179,13 +153,9 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
 
 	LOGI("%s() -got %d input events\n", __func__, numEvents);
         // Process events
-        for (int i = 0; i < numEvents; i++) {
+        for (int i = 0; (i < numEvents) && !cur_ctx->force_exit; i++) {
             // Check if the event is for the server socket
             if (events[i].data.fd != cur_ctx->client_sock) {
-                if (events[i].data.fd == cur_ctx->exit_fd) {
-	                LOGI("%s() -exit!\n", __func__);
-                    break;
-                }
 	            LOGE("%s() -client socket fd wrong!\n", __func__);
                 continue;
             }
@@ -264,6 +234,21 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     //     vscr->info.height = info->height;
                     //     break;
                     // }
+                    case DPY_EVENT_EXIT:
+                    {
+                        // Wait for server notified to close the socket
+                        // Otherwise, server may still sending data to closed client end
+                        if (cur_ctx->client_sock != -1) {
+                            shutdown(cur_ctx->client_sock, SHUT_RDWR);
+                            close(cur_ctx->client_sock);
+                            cur_ctx->client_sock = -1;
+                        }
+
+                        lk.unlock();
+
+                        cur_ctx->force_exit = true;
+                        break;
+                    }
                     default:
                         lk.unlock();
                         break;
@@ -272,7 +257,6 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
         }
     }
 
-    cur_ctx->hotplug(0);
     return NULL;
 }
 
