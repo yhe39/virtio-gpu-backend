@@ -1047,6 +1047,7 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
         }
 
         for (int i = 0; i < numEvents; i++) {
+
             if (events[i].data.fd == server_sock) {
                 // Accept incoming connection
                 len = sizeof (client_sockaddr);
@@ -1061,8 +1062,8 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 		}
 */
                 // Close previous client connect, and remove listener
-		pthread_mutex_lock(&vdpy.client_mutex);
-                if (client_sock == -1) {
+				pthread_mutex_lock(&vdpy.client_mutex);
+                if (client_sock != -1) {
 	pr_info("%s() -4.0\n", __func__);
 		close_client(epollfd, client_sock);
 		client_sock = -1;
@@ -1097,6 +1098,7 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 					ret = recv(client_sock, &msg_header, sizeof(msg_header), 0);
 					if ((ret <= 0) || (ret != sizeof(msg_header))) {
 						pr_err("recv event header fail (%d vs. %d)!", ret, sizeof(msg_header));
+
 						pthread_mutex_unlock(&vdpy.client_mutex);
 						break;
 					}
@@ -1104,8 +1106,10 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 					if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
 						// data error, clear receive buffer
 						pr_err("recv data err!");
-						while (recv(client_sock, &buf, 256, 0) > 0);
-						pthread_mutex_unlock(&vdpy.client_mutex);
+						while (recv(client_sock, &buf, 256, 0) > 0)
+						;
+
+		    			pthread_mutex_unlock(&vdpy.client_mutex);
 						break;
 					}
 
@@ -1114,11 +1118,14 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 						ret = recv(client_sock, &buf, msg_header.e_size, 0);
 						if (ret != msg_header.e_size) {
 							pr_err("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
-							while (recv(client_sock, &buf, 256, 0) > 0);
-							pthread_mutex_unlock(&vdpy.client_mutex);
+							while (recv(client_sock, &buf, 256, 0) > 0)
+							;
+
+		    				pthread_mutex_unlock(&vdpy.client_mutex);
 							break;
 						}
 					}
+					pthread_mutex_unlock(&vdpy.client_mutex);
 
 	pr_info("%s() -5.4\n", __func__);
 					switch (msg_header.e_type) {

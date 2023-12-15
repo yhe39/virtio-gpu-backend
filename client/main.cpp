@@ -100,14 +100,13 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 #endif
 
                 animating = 1;
-                display_client->hotplug(1);
             }
             LOGI("APP_CMD_INIT_WINDOW -2");
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
 #ifdef USE_GAME_RENDER
-//            renderer->terminate();
+            renderer->terminate();
 #else
             close_backend_thread();
 #endif

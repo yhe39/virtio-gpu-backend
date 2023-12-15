@@ -26,7 +26,7 @@ DisplayClient::DisplayClient(Renderer * rd) : client_sock(-1), force_exit(false)
 int DisplayClient::start()
 {
     int ret, len;
-    struct sockaddr_un client_sockaddr; 
+    struct sockaddr_un client_sockaddr;
 
     client_sock = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (client_sock == -1) {
@@ -35,10 +35,10 @@ int DisplayClient::start()
     }
 
     memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
-    client_sockaddr.sun_family = AF_UNIX;   
-    strcpy(client_sockaddr.sun_path, CLIENT_SOCK_PATH); 
+    client_sockaddr.sun_family = AF_UNIX;
+    strcpy(client_sockaddr.sun_path, CLIENT_SOCK_PATH);
     len = sizeof(client_sockaddr);
-    
+
     ::unlink(CLIENT_SOCK_PATH);
     ret = ::bind(client_sock, (struct sockaddr *) &client_sockaddr, len);
     if (ret == -1){
@@ -63,7 +63,7 @@ int DisplayClient::start()
 int DisplayClient::term()
 {
     int ret;
-    uint64_t m = -1;
+    uint64_t m = 1;
     force_exit = true;
     ret = write(exit_fd, &m, sizeof(m));
     if (ret != sizeof(m))
@@ -102,7 +102,7 @@ int DisplayClient::connect()
 
 int DisplayClient::hotplug(int in)
 {
-    LOGI("--yue-- hotplug\n");
+    LOGI("--yue-- hotplug - %d\n", in);
     int ret;
     struct dpy_evt_header evt_hdr;
     std::unique_lock<mutex> lk(sock_mtx);
@@ -123,7 +123,7 @@ int DisplayClient::hotplug(int in)
             return -1;
         }
     }
-    return 0;    
+    return 0;
 }
 
 void * DisplayClient::work_thread(DisplayClient *cur_ctx)
@@ -176,7 +176,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             LOGE ("epoll_wait");
             continue;
         }
-        
+
 	LOGI("%s() -got %d input events\n", __func__, numEvents);
         // Process events
         for (int i = 0; i < numEvents; i++) {
@@ -195,7 +195,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                 LOGE("poll client error: 0x%x", events[i].events);
                 continue;
             }
-            
+
             do {
                 std::unique_lock<mutex> lk(cur_ctx->sock_mtx);
 
@@ -205,7 +205,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
                     break;
                 }
-                
+
                 if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
                     // data error, clear receive buffer
                     LOGE("recv data err!");
@@ -271,7 +271,8 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             } while(!cur_ctx->force_exit);
         }
     }
-    cur_ctx->hotplug(1);
+
+    cur_ctx->hotplug(0);
     return NULL;
 }
 
