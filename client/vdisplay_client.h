@@ -12,6 +12,7 @@ class DisplayClient {
 public:
     DisplayClient(Renderer * rd);
     int start();
+    int stop();
     int term();
 
     int connect();
@@ -25,6 +26,7 @@ private:
     std::mutex sock_mtx;
 
     bool force_exit;
+    int exit_fd;
     shared_ptr<thread> work_tid;
 
     Renderer *renderer;

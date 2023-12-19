@@ -50,8 +50,8 @@ static void init_vdpy(struct virtio_backend_info *info) {
 
 extern struct pci_vdev_ops pci_ops_virtio_gpu;
 static struct virtio_backend_info virtio_gpu_info = {
-	.pci_vdev_ops = &pci_ops_virtio_gpu,
-	.hook_before_init = init_vdpy,
+        .pci_vdev_ops = &pci_ops_virtio_gpu,
+        .hook_before_init = init_vdpy,
 };
 #endif
 
@@ -121,24 +121,26 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
             renderer->draw();
 #endif
             break;
-	case APP_CMD_START:
+        case APP_CMD_START:
             LOGI("APP_CMD_START");
-	    break;
-	case APP_CMD_RESUME:
+            break;
+        case APP_CMD_RESUME:
             LOGI("APP_CMD_RESUME");
             display_client->start();
-	    break;
-	case APP_CMD_INPUT_CHANGED:
+            break;
+        case APP_CMD_INPUT_CHANGED:
             LOGI("APP_CMD_INPUT_CHANGED");
-	    break;
-	case APP_CMD_PAUSE:
+            break;
+        case APP_CMD_PAUSE:
             LOGI("APP_CMD_PAUSE - 1");
-            display_client->term();
+            display_client->stop();
             LOGI("APP_CMD_PAUSE - 2");
-	    break;
-	case APP_CMD_STOP:
-	    LOGI("APP_CMD_STOP");
-//	    display_client->hotplug(1);
+            break;
+        case APP_CMD_STOP:
+            LOGI("APP_CMD_STOP - 1");
+//            display_client->hotplug(1);
+            display_client->term();
+            LOGI("APP_CMD_STOP - 2");
             break;
         default:
             LOGI("APP_CMD %d", cmd);

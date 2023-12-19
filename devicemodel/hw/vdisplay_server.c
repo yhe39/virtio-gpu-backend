@@ -815,10 +815,10 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 ///////////////////////////////////////
 //        pr_info("--yue-- loop in SDL display thread\n");
         if (triger1 != NULL) {
-            pr_info("--yue-- trigger_data1\n");
+//            pr_info("--yue-- trigger_data1\n");
             (*triger1)(triger_data1);
         } else {
-            pr_info("--yue-- trigger1 is NULL!\n");
+//            pr_info("--yue-- trigger1 is NULL!\n");
         }
 ///////////////////////////////////
         pthread_mutex_lock(&vdpy.vdisplay_mutex);
@@ -903,6 +903,45 @@ sdl_fail:
     return NULL;
 }
 
+static inline int _send(int fd, void* dt, int len)
+{
+    char * data= (char *)dt;
+    int ret, sent_bytes = 0;
+    do {
+        ret = send(fd, data + sent_bytes, len - sent_bytes, 0);
+        if (ret <= 0) {
+            if (errno != EAGAIN)
+                pr_err("_send fail (%d vs. %d) %s!", ret, len - sent_bytes, strerror(errno));
+            continue;
+        }
+
+        sent_bytes += ret;
+        if (sent_bytes == len) {
+            break;
+        }
+    } while (errno == EAGAIN);
+    return ret;
+}
+
+static inline int _recv(int fd, void* dt, int len)
+{
+    char * data= (char *)dt;
+    int ret, got_bytes = 0;
+    do {
+        ret = recv(fd, data + got_bytes, len - got_bytes, 0);
+        if (ret <= 0) {
+            if (errno != EAGAIN)
+                pr_err("_recv fail (%d vs. %d) %s!", ret, len - got_bytes, strerror(errno));
+            continue;
+        }
+
+        got_bytes += ret;
+        if (got_bytes == len) {
+            break;
+        }
+    } while (errno == EAGAIN);
+    return ret;
+}
 
 #define SERVER_SOCK_PATH  "/data/local/ipc/virt_disp_server"
 static int client_sock = -1;
@@ -911,26 +950,29 @@ static inline int client_send(int e_type, void *data, int len)
     int ret;
     struct dpy_evt_header evt_hdr;
 
+    pr_info("%s() -1", __func__);
     if (client_sock == -1) {
+        pr_info("%s() invalid sock", __func__);
         return -1;
     }
 
     evt_hdr.e_type = e_type;
     evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
     evt_hdr.e_size = len;
-    ret = send(client_sock, &evt_hdr, sizeof(evt_hdr), 0);
+    ret = _send(client_sock, &evt_hdr, sizeof(evt_hdr));
     if (ret != sizeof(evt_hdr)) {
-        pr_err("%s() send header fail(%d vs. %d)", __func__, ret, sizeof(evt_hdr));
+        pr_err("%s() send header fail(%d vs. %d) %s", __func__, ret, sizeof(evt_hdr), strerror(errno));
         return -1;
     }
 
     if (data && (len > 0)) {
-        ret = send(client_sock, data, len, 0);
+        ret = _send(client_sock, data, len);
         if (ret != len) {
-            pr_err("%s() send body fail(%d vs. %d)", __func__, ret, len);
+            pr_err("%s() send body fail(%d vs. %d) %s", __func__, ret, len, strerror(errno));
             return -1;
         }
     }
+    pr_info("%s() -2", __func__);
     return 0;
 }
 
@@ -959,7 +1001,11 @@ static inline int client_send_fd(int fd)
     cmptr->cmsg_level = SOL_SOCKET;
     cmptr->cmsg_type = SCM_RIGHTS;
     *((int*)CMSG_DATA(cmptr)) = fd;
-    ret = sendmsg(client_sock, &msg, 0);
+
+    do {
+        ret = sendmsg(client_sock, &msg, 0);
+    } while ((ret <= 0) && (errno == EAGAIN));
+
     if (ret <= 0) {
         pr_err("%s() sendmsg fail(ret=%d)", __func__, ret);
     }
@@ -1001,9 +1047,13 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
     memset(&server_sockaddr, 0, sizeof(struct sockaddr_un));
     server_sock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (server_sock == -1){
-        pr_err("SOCKET ERROR: %d\n", errno);
+        pr_err("SOCKET ERROR: %s\n", strerror(errno));
         return NULL;
     }
+
+    int flags;
+    flags = fcntl(server_sock, F_GETFL, 0);
+    fcntl(server_sock, F_SETFL, flags | O_NONBLOCK);
 
     pr_info("%s() -2\n", __func__);
     server_sockaddr.sun_family = AF_UNIX;
@@ -1014,13 +1064,13 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
     unlink(SERVER_SOCK_PATH);
     ret = bind(server_sock, (struct sockaddr *) &server_sockaddr, len);
     if (ret == -1){
-        pr_err("BIND ERROR: %d\n", errno);
+        pr_err("BIND ERROR: %s\n", strerror(errno));
         goto close_sockets;
     }
 
     ret = listen(server_sock, 10);
     if (ret == -1){
-        pr_err("LISTEN ERROR: %d\n", errno);
+        pr_err("LISTEN ERROR: %s\n", strerror(errno));
         goto close_sockets;
     }
 
@@ -1052,6 +1102,10 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 len = sizeof (client_sockaddr);
                 new_client_sock = accept (server_sock, (struct sockaddr*)&client_sockaddr, &len);
                 pr_err("Client connected!\n");
+
+                int flags;
+                flags = fcntl(new_client_sock, F_GETFL, 0);
+                fcntl(new_client_sock, F_SETFL, flags | O_NONBLOCK);
 /*
         if (triger != NULL) {
                 pr_info("--yue-- trigger hp\n");
@@ -1092,74 +1146,71 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                     continue;
                 }
     pr_info("%s() -5.2 - 0x%x\n", __func__, events[i].events);
-                do {
-                    pthread_mutex_lock(&vdpy.client_mutex);
-                    ret = recv(client_sock, &msg_header, sizeof(msg_header), 0);
-                    if ((ret <= 0) || (ret != sizeof(msg_header))) {
-                        pr_err("recv event header fail (%d vs. %d)!", ret, sizeof(msg_header));
 
-                        pthread_mutex_unlock(&vdpy.client_mutex);
-                        break;
-                    }
+                pthread_mutex_lock(&vdpy.client_mutex);
+                ret = _recv(client_sock, &msg_header, sizeof(msg_header));
+                if (ret != sizeof(msg_header)) {
+                    pr_err("recv event header fail (%d vs. %d) %s!", ret, sizeof(msg_header), strerror(errno));
 
-                    if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
-                        // data error, clear receive buffer
-                        pr_err("recv data err!");
-                        while (recv(client_sock, &buf, 256, 0) > 0)
-                        ;
+                    pthread_mutex_unlock(&vdpy.client_mutex);
+                    continue;
+                }
 
-                        pthread_mutex_unlock(&vdpy.client_mutex);
-                        break;
-                    }
+                if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
+                    // data error, clear receive buffer
+                    pr_err("recv data err!");
+
+                    pthread_mutex_unlock(&vdpy.client_mutex);
+                    continue;
+                }
 
     pr_info("%s() -5.3\n", __func__);
-                    if (msg_header.e_size > 0) {
-                        ret = recv(client_sock, &buf, msg_header.e_size, 0);
-                        if (ret != msg_header.e_size) {
-                            pr_err("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
-                            while (recv(client_sock, &buf, 256, 0) > 0)
-                            ;
+                if (msg_header.e_size > 0) {
+                    ret = _recv(client_sock, buf, msg_header.e_size);
+                    if (ret != msg_header.e_size) {
+                        pr_err("recv event body fail (%d vs. %d) %s!", ret, msg_header.e_size, strerror(errno));
 
-                            pthread_mutex_unlock(&vdpy.client_mutex);
-                            break;
-                        }
+                        pthread_mutex_unlock(&vdpy.client_mutex);
+                        continue;
                     }
-                    pthread_mutex_unlock(&vdpy.client_mutex);
+                }
+                pthread_mutex_unlock(&vdpy.client_mutex);
 
     pr_info("%s() -5.4\n", __func__);
-                    switch (msg_header.e_type) {
-                        case DPY_EVENT_DISPLAY_INFO:
-                        {
-                            struct display_info *info = (struct display_info *)buf;
-                            vscr->info.xoff = info->xoff;
-                            vscr->info.yoff = info->yoff;
-                            vscr->info.width = info->width;
-                            vscr->info.height = info->height;
-                            break;
-                        }
-                        case DPY_EVENT_HOTPLUG:
-                        {
-                            int is_in = *(int *)buf;
-                            pr_err("--yue-- hotplug event -%d\n", is_in);
-                            if (triger != NULL) {
-                                    pr_info("--yue-- trigger hp\n");
-                                    (*triger)(triger_data);
-                            } else {
-                                    pr_info("--yue-- trigger is NULL!\n");
-                            }
-                            if (!is_in) {
-                                pthread_mutex_lock(&vdpy.client_mutex);
-                                client_send(DPY_EVENT_EXIT, NULL, 0);
-                                close_client(epollfd, client_sock);
-                                client_sock = -1;
-                                pthread_mutex_unlock(&vdpy.client_mutex);
-                            }
-                            break;
-                        }
-                        default:
-                            break;
+                switch (msg_header.e_type) {
+                    case DPY_EVENT_DISPLAY_INFO:
+                    {
+                        struct display_info *info = (struct display_info *)buf;
+                        vscr->info.xoff = info->xoff;
+                        vscr->info.yoff = info->yoff;
+                        vscr->info.width = info->width;
+                        vscr->info.height = info->height;
+                        break;
                     }
-                } while (client_sock != -1);
+                    case DPY_EVENT_HOTPLUG:
+                    {
+                        int is_in = *(int *)buf;
+                        pr_err("--yue-- hotplug event -%d\n", is_in);
+                        if (triger != NULL) {
+                                pr_info("--yue-- trigger hp\n");
+                                (*triger)(triger_data);
+                                pr_info("--yue-- trigger hp2\n");
+                        } else {
+                                pr_info("--yue-- trigger is NULL!\n");
+                        }
+                        if (!is_in) {
+                            pr_err("%s() - before close client socket\n", __func__);
+                            pthread_mutex_lock(&vdpy.client_mutex);
+                            close_client(epollfd, client_sock);
+                            client_sock = -1;
+                            pthread_mutex_unlock(&vdpy.client_mutex);
+                            pr_err("%s() - after close client socket\n", __func__);
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
             }
         }
     }
@@ -1248,12 +1299,12 @@ void vdpy_surface_set(int handle __attribute__((unused)), int scanout_id __attri
         return;
     }
 
-    pthread_mutex_lock(&vdpy.client_mutex);
     pr_err("before send clinet\n");
+    pthread_mutex_lock(&vdpy.client_mutex);
     client_send(DPY_EVENT_SURFACE_SET, surf, sizeof(struct surface));
     client_send_fd(surf->dma_info.dmabuf_fd);
-    pr_err("after send clinet\n");
     pthread_mutex_unlock(&vdpy.client_mutex);
+    pr_err("after send clinet\n");
 }
 
 void vdpy_surface_update(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf)
@@ -1264,11 +1315,11 @@ void vdpy_surface_update(int handle __attribute__((unused)), int scanout_id __at
         return;
     }
 
-    pthread_mutex_lock(&vdpy.client_mutex);
     pr_err("before send clinet\n");
+    pthread_mutex_lock(&vdpy.client_mutex);
     client_send(DPY_EVENT_SURFACE_UPDATE, NULL, 0);
-    pr_err("after send clinet\n");
     pthread_mutex_unlock(&vdpy.client_mutex);
+    pr_err("after send clinet\n");
 }
 
 void
