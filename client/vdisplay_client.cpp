@@ -34,6 +34,10 @@ int DisplayClient::start()
         return -1;
     }
 
+    int flags;
+    flags = fcntl(client_sock, F_GETFL, 0);
+    fcntl(client_sock, F_SETFL, flags | O_NONBLOCK);
+
     memset(&client_sockaddr, 0, sizeof(struct sockaddr_un));
     client_sockaddr.sun_family = AF_UNIX;
     strcpy(client_sockaddr.sun_path, CLIENT_SOCK_PATH);
@@ -50,13 +54,42 @@ int DisplayClient::start()
     }
 
     force_exit = false;
+    exit_fd = eventfd(0, 0);
+    if (exit_fd == -1) {
+        LOGE("failed to create exit fd\n");
+        return -1;
+    }
+
     work_tid = make_shared<thread>(work_thread, this);
     return ret;
 }
 
-int DisplayClient::term()
+int DisplayClient::stop()
 {
     hotplug(0);
+
+    int ret;
+    uint64_t m = 1;
+    force_exit = true;
+    ret = write(exit_fd, &m, sizeof(m));
+    if (ret != sizeof(m))
+        LOGE("failed to write exit mesg - %s\n", strerror(errno));
+    return 0;
+}
+
+
+int DisplayClient::term()
+{
+    work_tid->join();
+    work_tid.reset();
+    close(exit_fd);
+
+    if (client_sock != -1) {
+        shutdown(client_sock, SHUT_RDWR);
+        close(client_sock);
+        client_sock = -1;
+    }
+
     return 0;
 }
 
@@ -81,6 +114,52 @@ int DisplayClient::connect()
     return ret;
 }
 
+static inline int _send(int fd, void* dt, int len)
+{
+    char * data= (char *)dt;
+    int ret, sent_bytes = 0;
+
+    LOGI("%s() -1\n", __func__);
+    do {
+        ret = send(fd, data + sent_bytes, len - sent_bytes, 0);
+        if (ret <= 0) {
+            if (errno != EAGAIN)
+                LOGE("_send fail (%d vs. %d) %s!", ret, len - sent_bytes, strerror(errno));
+            continue;
+        }
+
+        sent_bytes += ret;
+        if (sent_bytes == len) {
+            break;
+        }
+    } while (errno == EAGAIN);
+    LOGI("%s() -2\n", __func__);
+    return ret;
+}
+
+static inline int _recv(int fd, void* dt, int len)
+{
+    char * data= (char *)dt;
+    int ret, got_bytes = 0;
+
+    LOGI("%s() -1\n", __func__);
+    do {
+        ret = recv(fd, data + got_bytes, len - got_bytes, 0);
+        if (ret <= 0) {
+            if (errno != EAGAIN)
+                LOGE("_recv fail (%d vs. %d) %s!", ret, len - got_bytes, strerror(errno));
+            continue;
+        }
+
+        got_bytes += ret;
+        if (got_bytes == len) {
+            break;
+        }
+    } while (errno == EAGAIN);
+    LOGI("%s() -2\n", __func__);
+    return ret;
+}
+
 int DisplayClient::hotplug(int in)
 {
     LOGI("--yue-- hotplug - %d\n", in);
@@ -88,21 +167,24 @@ int DisplayClient::hotplug(int in)
     struct dpy_evt_header evt_hdr;
     std::unique_lock<mutex> lk(sock_mtx);
 
-    if (client_sock != -1) {
-        evt_hdr.e_type = DPY_EVENT_HOTPLUG;
-        evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
-        evt_hdr.e_size = sizeof(in);
-        ret = send(client_sock, &evt_hdr, sizeof(evt_hdr), 0);
-        if (ret != sizeof(evt_hdr)) {
-            LOGE("%s() send header fail(%d vs. 0x%lx)", __func__, ret, (unsigned long)sizeof(evt_hdr));
-            return -1;
-        }
+    if (client_sock == -1) {
+        LOGE("%s() invalid client socket", __func__);
+        return -1;
+    }
 
-        ret = send(client_sock, &in, sizeof(in), 0);
-        if (ret != sizeof(in)) {
-            LOGE("%s() send body fail(%d vs. 0x%lx)", __func__, ret, (unsigned long)sizeof(in));
-            return -1;
-        }
+    evt_hdr.e_type = DPY_EVENT_HOTPLUG;
+    evt_hdr.e_magic = DISPLAY_MAGIC_CODE;
+    evt_hdr.e_size = sizeof(in);
+    ret = _send(client_sock, &evt_hdr, sizeof(evt_hdr));
+    if (ret != sizeof(evt_hdr)) {
+        LOGE("%s() send header fail(%d vs. 0x%lx) %s", __func__, ret, (unsigned long)sizeof(evt_hdr), strerror(errno));
+        return -1;
+    }
+
+    ret = _send(client_sock, &in, sizeof(in));
+    if (ret != sizeof(in)) {
+        LOGE("%s() send body fail(%d vs. 0x%lx) %s", __func__, ret, (unsigned long)sizeof(in), strerror(errno));
+        return -1;
     }
     return 0;
 }
@@ -125,6 +207,13 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
     event.data.fd = cur_ctx->client_sock;
     if (epoll_ctl (epollfd, EPOLL_CTL_ADD, cur_ctx->client_sock, &event) == -1) {
         LOGE ("epoll_ctl");
+        return NULL;
+    }
+
+    event.events = EPOLLIN;
+    event.data.fd = cur_ctx->exit_fd;
+    if (epoll_ctl (epollfd, EPOLL_CTL_ADD, cur_ctx->exit_fd, &event) == -1) {
+        LOGE ("epoll_ctl2");
         return NULL;
     }
 
@@ -156,6 +245,11 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
         for (int i = 0; (i < numEvents) && !cur_ctx->force_exit; i++) {
             // Check if the event is for the server socket
             if (events[i].data.fd != cur_ctx->client_sock) {
+                if (events[i].data.fd == cur_ctx->exit_fd) {
+                    LOGI("%s() -exit!\n", __func__);
+                    break;
+                }
+
 	            LOGE("%s() -client socket fd wrong!\n", __func__);
                 continue;
             }
@@ -169,25 +263,22 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             do {
                 std::unique_lock<mutex> lk(cur_ctx->sock_mtx);
 
-                ret = ::recv(cur_ctx->client_sock, &msg_header, sizeof(msg_header), 0);
-                if ((ret <= 0) || (ret != sizeof(msg_header))) {
-                    LOGE("recv event header fail (%d vs. 0x%lx)!", ret, (unsigned long)sizeof(msg_header));
-                    while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
+                ret = _recv(cur_ctx->client_sock, &msg_header, sizeof(msg_header));
+                if (ret != sizeof(msg_header)) {
+                    LOGE("recv event header fail (%d vs. 0x%lx) %s!", ret, (unsigned long)sizeof(msg_header), strerror(errno));
                     break;
                 }
 
                 if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
                     // data error, clear receive buffer
                     LOGE("recv data err!");
-                    while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
                     break;
                 }
 
                 if (msg_header.e_size > 0) {
-                    ret = ::recv(cur_ctx->client_sock, &buf, msg_header.e_size, 0);
+                    ret = _recv(cur_ctx->client_sock, &buf, msg_header.e_size);
                     if (ret != msg_header.e_size) {
-                        LOGE("recv event body fail (%d vs. %d) !", ret, msg_header.e_size);
-                        while (::recv(cur_ctx->client_sock, &buf, 256, 0) > 0);
+                        LOGE("recv event body fail (%d vs. %d) %s!", ret, msg_header.e_size, strerror(errno));
                         break;
                     }
                 }
@@ -234,29 +325,15 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     //     vscr->info.height = info->height;
                     //     break;
                     // }
-                    case DPY_EVENT_EXIT:
-                    {
-                        // Wait for server notified to close the socket
-                        // Otherwise, server may still sending data to closed client end
-                        if (cur_ctx->client_sock != -1) {
-                            shutdown(cur_ctx->client_sock, SHUT_RDWR);
-                            close(cur_ctx->client_sock);
-                            cur_ctx->client_sock = -1;
-                        }
-
-                        lk.unlock();
-
-                        cur_ctx->force_exit = true;
-                        break;
-                    }
                     default:
                         lk.unlock();
                         break;
                 }
-            } while(!cur_ctx->force_exit);
+            } while(0);
         }
     }
 
+    LOGE ("%s() exit!", __func__);
     return NULL;
 }
 
@@ -276,9 +353,12 @@ int DisplayClient::recv_fd(int sock_fd, int *fd)
     msg.msg_control = cmsgbuf;
     msg.msg_controllen = sizeof(cmsgbuf);
 
-    ret = ::recvmsg(sock_fd, &msg, MSG_WAITALL);
+    do {
+        ret = ::recvmsg(sock_fd, &msg, MSG_WAITALL);
+    } while ((ret < 0) && (errno == EAGAIN));
+
     if (ret < 0) {
-        LOGE("recvmsg() ret < 0\n");
+        LOGE("recvmsg() ret < 0 Error: %s\n", strerror(errno));
         return -1;
     }
 
