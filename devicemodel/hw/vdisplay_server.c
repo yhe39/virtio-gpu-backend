@@ -5,6 +5,7 @@
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 
 // #include <SDL.h>
@@ -1062,7 +1063,11 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
 
     pr_info("%s() -3\n", __func__);
     unlink(SERVER_SOCK_PATH);
+
+    mode_t mask = 0;
+    mask = umask(0);
     ret = bind(server_sock, (struct sockaddr *) &server_sockaddr, len);
+    umask(mask);
     if (ret == -1){
         pr_err("BIND ERROR: %s\n", strerror(errno));
         goto close_sockets;
