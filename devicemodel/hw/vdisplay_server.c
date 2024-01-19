@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <netinet/in.h>
 
 // #include <SDL.h>
 // #include <SDL_syswm.h>
@@ -32,6 +33,7 @@
 #define VSCREEN_MAX_NUM VDPY_MAX_NUM
 #define EDID_BASIC_BLOCK_SIZE 128
 #define EDID_CEA861_EXT_BLOCK_SIZE 128
+#define SERVER_PORT 6999
 
 struct state {
     bool is_ui_realized;
@@ -112,6 +114,11 @@ static struct display {
     // .eglContext = EGL_NO_CONTEXT,
     // .eglSurface = EGL_NO_SURFACE
 };
+
+static struct control {
+    pthread_mutex_t client_mutex;
+    pthread_t ctl_server_tid;
+}  vctl;
 
 typedef enum {
     ESTT = 1, // Established Timings I & II
@@ -1237,6 +1244,199 @@ close_sockets:
     return NULL;
 }
 
+static void *
+vdpy_control_server_thread(void *data __attribute__((unused)))
+{
+    int ret;
+    struct sockaddr_in server_sockaddr;
+    struct sockaddr_in client_sockaddr;
+    char buf[256];
+    int server_sock = -1, new_client_sock;
+    socklen_t len;
+    int client_sock = -1;
+
+    int epollfd;
+    struct epoll_event event, events[10];
+
+    struct dpy_evt_header msg_header;
+
+    pr_info("%s() -1\n", __func__);
+
+    memset(&server_sockaddr, 0, sizeof(struct sockaddr_in));
+    server_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_sock == -1){
+        pr_err("SOCKET ERROR: %s\n", strerror(errno));
+        return NULL;
+    }
+
+    int flags;
+    flags = fcntl(server_sock, F_GETFL, 0);
+    fcntl(server_sock, F_SETFL, flags | O_NONBLOCK);
+
+    pr_info("%s() -2\n", __func__);
+    server_sockaddr.sin_family = AF_INET;
+    server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_sockaddr.sin_port = htons(SERVER_PORT);
+    // strcpy(server_sockaddr.sun_path, SERVER_SOCK_PATH);
+    len = sizeof(server_sockaddr);
+
+    pr_info("%s() -3\n", __func__);
+    // unlink(SERVER_SOCK_PATH);
+
+    mode_t mask = 0;
+    mask = umask(0);
+    ret = bind(server_sock, (struct sockaddr *) &server_sockaddr, len);
+    umask(mask);
+    if (ret == -1){
+        pr_err("BIND ERROR: %s\n", strerror(errno));
+        goto close_sockets;
+    }
+
+    ret = listen(server_sock, 10);
+    if (ret == -1){
+        pr_err("LISTEN ERROR: %s\n", strerror(errno));
+        goto close_sockets;
+    }
+
+    epollfd = epoll_create1(0);
+    if (epollfd == -1) {
+        pr_err ("epoll_create1");
+        goto close_sockets;
+    }
+
+    event.events = EPOLLIN;
+    event.data.fd = server_sock;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, server_sock, &event) == -1) {
+        pr_err ("EPOLL_CTL_ADD server %d fail", server_sock);
+        goto close_epoll_fd;
+    }
+
+    pr_info("==liang== display server thread is created,listen on port:%d\n",SERVER_PORT);
+
+    while (1) {
+        int numEvents = epoll_wait(epollfd, events, 5, -1);
+        if (numEvents == -1) {
+            perror ("epoll_wait");
+            goto close_epoll_fd;
+        }
+
+        for (int i = 0; i < numEvents; i++) {
+            if (events[i].data.fd == server_sock) {
+                // Accept incoming connection
+                len = sizeof (client_sockaddr);
+                new_client_sock = accept (server_sock, (struct sockaddr*)&client_sockaddr, &len);
+                pr_err("Client connected!\n");
+
+                int flags;
+                flags = fcntl(new_client_sock, F_GETFL, 0);
+                fcntl(new_client_sock, F_SETFL, flags | O_NONBLOCK);
+
+                // Close previous client connect, and remove listener
+                pthread_mutex_lock(&vctl.client_mutex);
+                if (client_sock != -1) {
+                    pr_info("%s() -4.0\n", __func__);
+                    close_client(epollfd, client_sock);
+                    client_sock = -1;
+                }
+
+                pr_info("%s() -4.1\n", __func__);
+                client_sock = new_client_sock;
+                // if (vscr->set_modifier)
+                //     client_send(DPY_EVENT_SET_MODIFIER, &vscr->modifier, sizeof(vscr->modifier));
+
+                pr_info("%s() -4.2\n", __func__);
+                // Add new listener
+                event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
+                event.data.fd = client_sock;
+                if (epoll_ctl(epollfd, EPOLL_CTL_ADD, client_sock, &event) == -1) {
+                    pr_err("EPOLL_CTL_ADD client %d fail!", client_sock);
+                }
+                pthread_mutex_unlock(&vctl.client_mutex);
+
+            } else if (events[i].data.fd == client_sock) {
+                pr_info("%s() -5.1\n", __func__);
+                if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+                    pr_err("poll client error: 0x%x", events[i].events);
+                    pthread_mutex_lock(&vctl.client_mutex);
+                    close_client(epollfd, client_sock);
+                    client_sock = -1;
+                    pthread_mutex_unlock(&vctl.client_mutex);
+                    continue;
+                }
+                pr_info("%s() -5.2 - 0x%x\n", __func__, events[i].events);
+
+                pthread_mutex_lock(&vctl.client_mutex);
+                ret = _recv(client_sock, &msg_header, sizeof(msg_header));
+                if (ret != sizeof(msg_header)) {
+                    pr_err("recv event header fail (%d vs. %d) %s!", ret, sizeof(msg_header), strerror(errno));
+
+                    pthread_mutex_unlock(&vctl.client_mutex);
+                    continue;
+                }
+
+                if (msg_header.e_magic != DISPLAY_MAGIC_CODE) {
+                    // data error, clear receive buffer
+                    pr_err("recv data err!");
+
+                    pthread_mutex_unlock(&vctl.client_mutex);
+                    continue;
+                }
+
+                pr_info("%s() -5.3\n", __func__);
+                if (msg_header.e_size > 0) {
+                    ret = _recv(client_sock, buf, msg_header.e_size);
+                    if (ret != msg_header.e_size) {
+                        pr_err("recv event body fail (%d vs. %d) %s!", ret, msg_header.e_size, strerror(errno));
+
+                        pthread_mutex_unlock(&vctl.client_mutex);
+                        continue;
+                    }
+                }
+                pthread_mutex_unlock(&vctl.client_mutex);
+
+                pr_info("%s() -5.4\n", __func__);
+                switch (msg_header.e_type) {
+                    case DPY_EVENT_START_CAST:
+                    {
+                        system("am start -n com.intel.virtio_gpu_backend/android.app.NativeActivity");
+                        break;
+                    }
+                    case DPY_EVENT_STOP_CAST:
+                    {
+                        if (triger != NULL) {
+                            pr_info("--yue-- trigger hp\n");
+                            (*triger)(triger_data);
+                            pr_info("--yue-- trigger hp2\n");
+                         } else {
+                            pr_info("--yue-- trigger is NULL!\n");
+                         }
+                        system("am force-stop com.intel.virtio_gpu_backend");
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+close_epoll_fd:
+    if (epollfd != -1) {
+        close(epollfd);
+    }
+
+close_sockets:
+    if (server_sock != -1) {
+        shutdown(server_sock, SHUT_RDWR);
+        close(server_sock);
+    }
+    if (client_sock != -1) {
+        shutdown(client_sock, SHUT_RDWR);
+        close(client_sock);
+    }
+    return NULL;
+}
+
 int
 vdpy_init(int *num_vscreens)
 {
@@ -1246,6 +1446,16 @@ vdpy_init(int *num_vscreens)
     if (vdpy.s.n_connect) {
         return 0;
     }
+
+
+    pthread_mutex_init(&vctl.client_mutex, NULL);
+    err = pthread_create(&vctl.ctl_server_tid, NULL, vdpy_control_server_thread, &vctl);
+    if (err) {
+        pr_err("Failed to create the ctl_server_thread.\n");
+        return 0;
+    }
+    pthread_setname_np(vctl.ctl_server_tid, "acrn_ctl_server");
+
 
     // only support 1 physical screen now
     vdpy.vscrs_num = 1;
