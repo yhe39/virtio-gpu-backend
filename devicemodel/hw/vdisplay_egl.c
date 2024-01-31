@@ -724,11 +724,11 @@ static int egl_render_copy(GLuint src_tex,
 	// Set the viewport
 	struct vscreen *vscr = &vdpy.vscrs[0];
 	glViewport(0, 0, vscr->width, vscr->height);
-	checkGlError("glViewport");
+//	checkGlError("glViewport");
 
 	// Clear the color buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	checkGlError("glClear");
+//	checkGlError("glClear");
 
 	// Use the program object
 	GLuint program;
@@ -738,41 +738,41 @@ static int egl_render_copy(GLuint src_tex,
 		program = vdpy.programObject;
 	glLinkProgram(program);
 	glUseProgram(program);
-	checkGlError("glUseProgram");
+//	checkGlError("glUseProgram");
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	// Load the vertex position
 	glVertexAttribPointer(0, 3, GL_FLOAT,
 						  GL_FALSE, 5 * sizeof(GLfloat), vVertices);
-	checkGlError("glVertexAttribPointer0");
+//	checkGlError("glVertexAttribPointer0");
 	// Load the texture coordinate
 	glVertexAttribPointer(1, 2, GL_FLOAT,
 						  GL_FALSE, 5 * sizeof(GLfloat), &vVertices[3]);
-	checkGlError("glVertexAttribPointer1");
+//	checkGlError("glVertexAttribPointer1");
 
 	glEnableVertexAttribArray(0);
-	checkGlError("glEnableVertexAttribArray0");
+//	checkGlError("glEnableVertexAttribArray0");
 	glEnableVertexAttribArray(1);
-	checkGlError("glEnableVertexAttribArray1");
+//	checkGlError("glEnableVertexAttribArray1");
 
 	// Bind the base map
 	glActiveTexture(GL_TEXTURE0);
-	checkGlError("glActiveTexture");
+//	checkGlError("glActiveTexture");
 	if (is_dmabuf)
 		glBindTexture(GL_TEXTURE_EXTERNAL_OES, src_tex);
 	else
 		glBindTexture(GL_TEXTURE_2D, src_tex);
-	checkGlError2("glBindTexture", src_tex);
+//	checkGlError2("glBindTexture", src_tex);
 
 	// Set the base map sampler to texture unit to 0
 	// glUniform1i(userData->baseMapLoc, 0);
 	GLuint uniformlocation = glGetUniformLocation(program, "uTexture");
-	checkGlError("glGetUniformLocation");
+//	checkGlError("glGetUniformLocation");
 	glUniform1i(uniformlocation, 0);
-	checkGlError("glUniform1i");
+//	checkGlError("glUniform1i");
 
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
-	checkGlError("glDrawElements");
+//	checkGlError("glDrawElements");
 	return 0;
 }
 
@@ -780,7 +780,6 @@ static int egl_render_copy(GLuint src_tex,
 static int egl_create_tex(GLuint *texid, uint32_t format,
 								int w, int h)
 {
-	pr_info("%s -1\n", __func__);
 	glGenTextures(1, texid);
 	checkGlError2("glGenTextures", *texid);
 	glBindTexture(GL_TEXTURE_2D, *texid);
@@ -795,13 +794,11 @@ static int egl_create_tex(GLuint *texid, uint32_t format,
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	checkGlError("glTexParameteri");
-	pr_info("%s -2\n", __func__);
 	return 0;
 }
 
 static int egl_create_dma_tex(GLuint *texid)
 {
-	pr_info("%s -1\n", __func__);
 	glGenTextures(1, texid);
 	checkGlError2("glGenTextures", *texid);
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, *texid);
@@ -811,7 +808,6 @@ static int egl_create_dma_tex(GLuint *texid)
 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	checkGlError("glTexParameteri");
-	pr_info("%s -2\n", __func__);
 	return 0;
 }
 
@@ -820,7 +816,6 @@ static int egl_update_tex(GLuint texid,
 					  const SDL_Rect * rect, int format,
 					  const void *pixels)
 {
-	pr_info("%s -1\n", __func__);
 	glBindTexture(GL_TEXTURE_2D, texid);
 	checkGlError2("glBindTexture", texid);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -837,7 +832,6 @@ static int egl_update_tex(GLuint texid,
 					 rect->x, rect->y, rect->w, rect->h,
 					 GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	checkGlError("glTexSubImage2D");
-	pr_info("%s -2\n", __func__);
 	return 0;
 }
 
@@ -906,7 +900,6 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 		pr_err("%s: invalid scanout id\n", __func__);
 		return;
 	}
-	pr_info("%s -1\n", __func__);
 
 	vscr = vdpy.vscrs + scanout_id;
 
@@ -1081,7 +1074,6 @@ vdpy_surface_set(int handle, int scanout_id, struct surface *surf)
 	// }
 	/* Replace the cur_img with the created_img */
 	vscr->img = src_img;
-	pr_info("%s -2\n", __func__);
 }
 
 void
@@ -1127,7 +1119,6 @@ vdpy_surface_update(int handle, int scanout_id, struct surface *surf)
 		return;
 	}
 
-	pr_info("%s -1\n", __func__);
 	vscr = vdpy.vscrs + scanout_id;
 	// if (surf->surf_type == SURFACE_PIXMAN)
 	// 	SDL_UpdateTexture(vscr->surf_tex, NULL,
@@ -1165,7 +1156,6 @@ vdpy_surface_update(int handle, int scanout_id, struct surface *surf)
 
 	/* update the rendering time */
 	clock_gettime(CLOCK_MONOTONIC, &vscr->last_time);
-	pr_info("%s -2\n", __func__);
 }
 
 void
@@ -1195,7 +1185,6 @@ vdpy_cursor_define(int handle, int scanout_id, struct cursor *cur)
 		return;
 	}
 
-	pr_info("%s -1\n", __func__);
 	vscr = vdpy.vscrs + scanout_id;
 
 	if (vscr->cur_tex) {
@@ -1226,7 +1215,6 @@ vdpy_cursor_define(int handle, int scanout_id, struct cursor *cur)
 	egl_update_tex(vscr->cur_tex, &rt, GL_BGRA_EXT, cur->data);
 	glDisable(GL_BLEND);
 	checkGlError("glDisable");
-	pr_info("%s -2\n", __func__);
 }
 
 void
@@ -1242,14 +1230,12 @@ vdpy_cursor_move(int handle, int scanout_id, uint32_t x, uint32_t y)
 		return;
 	}
 
-	pr_info("%s -1\n", __func__);
 	vscr = vdpy.vscrs + scanout_id;
 	/* Only move the position of the cursor. The cursor_texture
 	 * will be handled in surface_update
 	 */
 	vscr->cur.x = x;
 	vscr->cur.y = y;
-	pr_info("%s -2\n", __func__);
 }
 
 static void
@@ -1262,7 +1248,6 @@ vdpy_sdl_ui_refresh(void *data)
 	struct vscreen *vscr;
 	int i;
 
-	// pr_info("%s -1\n", __func__);
 	ui_vdpy = (struct display *)data;
 
 	for (i = 0; i < vdpy.vscrs_num; i++) {
@@ -1304,7 +1289,6 @@ vdpy_sdl_ui_refresh(void *data)
 		checkEglError("eglSwapBuffers");
 		pr_dbg("%s vdpy.eglSurface=0x%x\n", __func__, vdpy.eglSurface);
 	}
-	// pr_info("%s -2\n", __func__);
 }
 
 static void
@@ -1475,15 +1459,6 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 			pr_info("display is exiting\n");
 			break;
 		}
-///////////////////////////////////////
-		pr_info("--yue-- loop in SDL display thread\n");
-		if (triger != NULL) {
-			pr_info("--yue-- trigger_data\n");
-			(*triger)(triger_data);
-		} else {
-			pr_info("--yue-- trigger is NULL!\n");
-		}
-///////////////////////////////////
 		pthread_mutex_lock(&vdpy.vdisplay_mutex);
 
 		if (TAILQ_EMPTY(&vdpy.request_list))

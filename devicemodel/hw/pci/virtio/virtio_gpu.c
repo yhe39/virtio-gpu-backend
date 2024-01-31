@@ -518,8 +518,8 @@ virtio_gpu_cfgread(void *vdev, int offset, int size, uint32_t *retval)
 
 	gpu = vdev;
 
-	if (offset == offsetof(struct virtio_gpu_config, events_read))
-		pr_err("--hang- read events_read happen -------\r\n");
+//	if (offset == offsetof(struct virtio_gpu_config, events_read))
+//		pr_info("read events_read happen -------\r\n");
 
 	ptr = (uint8_t *)&gpu->cfg + offset;
 	memcpy(retval, ptr, size);
@@ -537,7 +537,6 @@ virtio_gpu_cfgwrite(void *vdev, int offset, int size, uint32_t value)
 	ptr = (uint8_t *)&gpu->cfg + offset;
 	if (offset == offsetof(struct virtio_gpu_config, events_clear)) {
 
-		pr_err("---hang-- cfgwrite happen event readvalue :%d------------\r\n",gpu->cfg.events_read);
 		memcpy(ptr, &value, size);
 		gpu->cfg.events_read &= ~value;
 		gpu->cfg.events_clear &= ~value;
@@ -1098,7 +1097,6 @@ virtio_gpu_scanout_needs_flush(struct virtio_gpu *gpu,
 static void
 virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 {
-	pr_err("--yue-- %s\n", __func__);
 	struct virtio_gpu_resource_flush req;
 	struct virtio_gpu_ctrl_hdr resp;
 	struct virtio_gpu_resource_2d *r2d;
@@ -1113,7 +1111,6 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 	memset(&resp, 0, sizeof(resp));
 	virtio_gpu_update_resp_fence(&cmd->hdr, &resp);
 
-	pr_err("%s\n", __func__);
 	r2d = virtio_gpu_find_resource_2d(gpu, req.resource_id);
 	if (r2d == NULL) {
 		pr_err("%s: Illegal resource id %d\n", __func__,
@@ -1122,18 +1119,14 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 		memcpy(cmd->iov[1].iov_base, &resp, sizeof(resp));
 		return;
 	}
-	pr_err("--yue-- before if r2d->blob\n");
 	if (r2d->blob) {
-		pr_err("--yue--in the if r2d->blob\n");
 		virtio_gpu_dmabuf_ref(r2d->dma_info);
 		for (i = 0; i < gpu->scanout_num; i++) {
 			if (!virtio_gpu_scanout_needs_flush(gpu, i, req.resource_id, &req.r))
 				continue;
-			pr_err("--yue-- before call vdpy_surface_update\n");
 			surf.dma_info.dmabuf_fd = r2d->dma_info->dmabuf_fd;
 			surf.surf_type = SURFACE_DMABUF;
 			vdpy_surface_update(gpu->vdpy_handle, i, &surf);
-			pr_err("--yue-- after call vdpy_surface_update\n");
 		}
 		virtio_gpu_dmabuf_unref(r2d->dma_info);
 		resp.type = VIRTIO_GPU_RESP_OK_NODATA;
@@ -1145,7 +1138,6 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 	for (i = 0; i < gpu->scanout_num; i++) {
 		if (!virtio_gpu_scanout_needs_flush(gpu, i, req.resource_id, &req.r))
 			continue;
-		pr_err("--yue-- 11111\n");
 		gpu_scanout = gpu->gpu_scanouts + i;
 		surf.pixel = pixman_image_get_data(r2d->image);
 		surf.x = gpu_scanout->scanout_rect.x;
@@ -1157,7 +1149,6 @@ virtio_gpu_cmd_resource_flush(struct virtio_gpu_command *cmd)
 		surf.surf_type = SURFACE_PIXMAN;
 		surf.pixel = (char*)surf.pixel + bytes_pp * surf.x + surf.y * surf.stride;
 		vdpy_surface_update(gpu->vdpy_handle, i, &surf);
-		pr_err("--yue-- after 1111\n");
 	}
 	pixman_image_unref(r2d->image);
 
@@ -1480,58 +1471,10 @@ virtio_gpu_cmd_set_scanout_blob(struct virtio_gpu_command *cmd)
 }
 void triger_hotplug(void *data)
 {
-	pr_dbg("%s ---yue-- hot plug to hwc\n", __func__);
 	struct virtio_gpu *gpu = (struct virtio_gpu *)data;
 	gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
 	//write_config(&gpu->base,0,4);
 	virtio_config_changed(&gpu->base);
-}
-
-bool hotplug_trigered = false;
-void triger_hotplug1(void *data)
-{
-//	pr_dbg("%s ---yue-- \n", __func__);
-        const char* command = "getprop hotplug.ivshmem.display";
-        FILE* file = popen(command, "r");
-
-        if (!file) {
-//                pr_dbg("%s ---yue--  failed to start getprop!", __func__);
-                return;
-        }
-        char value[128];
-        memset(value, 0, sizeof(value));
-
-        if (fgets(value, sizeof(value), file) != NULL) {
-                if (value[0] != '\0' && value[0] != '\n') {
-                        value[strcspn(value, "\r\n")] = '\0';
-                        if (strcmp(value, "1") == 0) {
-//                                pr_dbg("--yue-- property value is 1");
-				struct virtio_gpu *gpu = (struct virtio_gpu *)data;
-
-				if (!hotplug_trigered) {
-					pr_dbg("---yue-- trigger hotplug event once \n");
-					hotplug_trigered = true;
-					gpu->cfg.events_read = VIRTIO_GPU_EVENT_DISPLAY;
-					//write_config(&gpu->base,0,4);
-					virtio_config_changed(&gpu->base);
-				} else {
-//					pr_dbg("---yue-- trigered. no opertion \n");
-				}
-                            } else if (strcmp(value, "0") == 0) {
-//                                pr_dbg("--yue-- property value is 0");
-                                hotplug_trigered = false;
-				pr_dbg("--yue-- reset hotplug_trigered\n");
-                        } else {
-//                                pr_dbg("--yue-- property value is neither 0 nor 1: %s", value);
-//				pr_dbg("--yue-- property value: %s", value);
-                        }
-                } else {
-//                        pr_dbg("--yue-- property value is empty.\n");
-                }
-        } else {
-//                pr_dbg("--yue-- failed to read property value.\n");
-        }
-	pclose(file);
 }
 
 static void
@@ -1568,43 +1511,33 @@ virtio_gpu_ctrl_bh(void *data)
 
 		switch (cmd.hdr.type) {
 		case VIRTIO_GPU_CMD_GET_EDID:
-			pr_err("%s VIRTIO_GPU_CMD_GET_EDID\n", __func__);
 			virtio_gpu_cmd_get_edid(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_GET_DISPLAY_INFO:
-			pr_err("%s VIRTIO_GPU_CMD_GET_DISPLAY_INFO\n", __func__);
 			virtio_gpu_cmd_get_display_info(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_CREATE_2D:
-			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_CREATE_2D\n", __func__);
 			virtio_gpu_cmd_resource_create_2d(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_UNREF:
-			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_UNREF\n", __func__);
 			virtio_gpu_cmd_resource_unref(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING:
-			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_ATTACH_BACKING\n", __func__);
 			virtio_gpu_cmd_resource_attach_backing(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING:
-			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_DETACH_BACKING\n", __func__);
 			virtio_gpu_cmd_resource_detach_backing(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_SET_SCANOUT:
-			pr_dbg("%s VIRTIO_GPU_CMD_SET_SCANOUT\n", __func__);
 			virtio_gpu_cmd_set_scanout(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D:
-			pr_dbg("%s VIRTIO_GPU_CMD_TRANSFER_TO_HOST_2D\n", __func__);
 			virtio_gpu_cmd_transfer_to_host_2d(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_FLUSH:
-			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_FLUSH\n", __func__);
 			virtio_gpu_cmd_resource_flush(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB:
-			pr_dbg("%s VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB\n", __func__);
 			if (!virtio_gpu_blob_supported(vdev)) {
 				virtio_gpu_cmd_unspec(&cmd);
 				break;
@@ -1612,7 +1545,6 @@ virtio_gpu_ctrl_bh(void *data)
 			virtio_gpu_cmd_create_blob(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_SET_SCANOUT_BLOB:
-			pr_dbg("%s VIRTIO_GPU_CMD_SET_SCANOUT_BLOB\n", __func__);
 			if (!virtio_gpu_blob_supported(vdev)) {
 				virtio_gpu_cmd_unspec(&cmd);
 				break;
@@ -1620,7 +1552,6 @@ virtio_gpu_ctrl_bh(void *data)
 			virtio_gpu_cmd_set_scanout_blob(&cmd);
 			break;
 		case VIRTIO_GPU_CMD_SET_MODIFIER:
-			pr_dbg("%s VIRTIO_GPU_CMD_SET_MODIFIER\n", __func__);
 			virtio_gpu_cmd_set_modifier(&cmd);
 			break;
 		default:
@@ -1755,7 +1686,6 @@ virtio_gpu_vga_bh(void *param)
 		gpu->vga.surf.surf_type = SURFACE_PIXMAN;
 		vdpy_surface_set(gpu->vdpy_handle, 0, &gpu->vga.surf);
 	}
-	pr_err("%s: --yue--\n", __func__);	
 	vdpy_surface_update(gpu->vdpy_handle, 0, &gpu->vga.surf);
 }
 
@@ -1845,7 +1775,6 @@ virtio_gpu_init(struct vmctx *ctx, struct pci_vdev *dev, char *opts __attribute_
 	gpu->vdpy_handle = vdpy_init(&gpu->scanout_num);
 
 	triger_init(triger_hotplug,gpu);
-	triger_init1(triger_hotplug1,gpu);
 
 	gpu->base.mtx = &gpu->mtx;
 	gpu->base.device_caps = VIRTIO_GPU_S_HOSTCAPS;

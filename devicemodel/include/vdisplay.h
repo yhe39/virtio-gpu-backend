@@ -100,7 +100,6 @@ void vdpy_cursor_define(int handle, int scanout_id, struct cursor *cur);
 void vdpy_cursor_move(int handle, int scanout_id, uint32_t x, uint32_t y);
 
 void triger_init(void (*func)(void *data), void *data);
-void triger_init1(void (*func1)(void *data1), void *data1);
 
 bool vdpy_submit_bh(int handle, struct vdpy_display_bh *bh);
 void vdpy_get_edid(int handle, int scanout_id, uint8_t *edid, size_t size);

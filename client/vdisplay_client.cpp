@@ -119,7 +119,6 @@ static inline int _send(int fd, void* dt, int len)
     char * data= (char *)dt;
     int ret, sent_bytes = 0;
 
-    LOGI("%s() -1\n", __func__);
     do {
         ret = send(fd, data + sent_bytes, len - sent_bytes, 0);
         if (ret <= 0) {
@@ -133,7 +132,6 @@ static inline int _send(int fd, void* dt, int len)
             break;
         }
     } while (errno == EAGAIN);
-    LOGI("%s() -2\n", __func__);
     return ret;
 }
 
@@ -142,7 +140,6 @@ static inline int _recv(int fd, void* dt, int len)
     char * data= (char *)dt;
     int ret, got_bytes = 0;
 
-    LOGI("%s() -1\n", __func__);
     do {
         ret = recv(fd, data + got_bytes, len - got_bytes, 0);
         if (ret <= 0) {
@@ -156,13 +153,11 @@ static inline int _recv(int fd, void* dt, int len)
             break;
         }
     } while (errno == EAGAIN);
-    LOGI("%s() -2\n", __func__);
     return ret;
 }
 
 int DisplayClient::hotplug(int in)
 {
-    LOGI("--yue-- hotplug - %d\n", in);
     int ret;
     struct dpy_evt_header evt_hdr;
     std::unique_lock<mutex> lk(sock_mtx);
@@ -231,7 +226,6 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             }
          }
 
-	LOGI("%s() -epoll events\n", __func__);
         // Buffer to hold events
         struct epoll_event events[5];
         int numEvents = epoll_wait (epollfd, events, 5, -1);
@@ -240,7 +234,6 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
             continue;
         }
 
-	LOGI("%s() -got %d input events\n", __func__, numEvents);
         // Process events
         for (int i = 0; (i < numEvents) && !cur_ctx->force_exit; i++) {
             // Check if the event is for the server socket
@@ -254,7 +247,6 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                 continue;
             }
 
-            LOGI("event value: 0x%x", events[i].events);
             if (!(events[i].events & EPOLLIN)) {
                 LOGE("poll client error: 0x%x", events[i].events);
                 continue;
@@ -283,7 +275,7 @@ void * DisplayClient::work_thread(DisplayClient *cur_ctx)
                     }
                 }
 
-                LOGI("got event type: 0x%x", msg_header.e_type);
+//                LOGI("got event type: 0x%x", msg_header.e_type);
                 switch (msg_header.e_type) {
                     case DPY_EVENT_SURFACE_SET:
                     {

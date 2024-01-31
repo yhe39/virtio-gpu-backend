@@ -148,16 +148,13 @@ int vos_backend_init(struct virtio_backend_info *info)
 //	struct epoll_event ev = {0};
 	struct virtio_base *base;
 
-	pr_info("%s -1\n", __func__);
 	ret = mevent_init();
 	if (ret < 0) {
 		pr_err("%s mevent_init fail\n", __func__);
 		return ret;
 	}
 
-	pr_info("%s -2\n", __func__);
 	for (i = 0; i < MAX_IRQS; i++) {
-		pr_info("%s -2.1\n", __func__);
 		evt_fds[i] = eventfd(0, EFD_NONBLOCK);
 		if (evt_fds[i] < 0) {
 			pr_err("%s\n", __func__);
@@ -166,7 +163,6 @@ int vos_backend_init(struct virtio_backend_info *info)
 		}
 	}
 
-	pr_info("%s -3 %s %p\n", __func__, info->shmem_devpath, info->shmem_ops->open);
 	ret = info->shmem_ops->open(info->shmem_devpath, &shmem_info, evt_fds, MAX_IRQS);
 	if (ret < 0) {
 		pr_err("%s\n", __func__);

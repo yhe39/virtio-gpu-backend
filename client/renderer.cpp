@@ -59,7 +59,6 @@ int Renderer::init(NativeWindowType window)
 	EGLConfig myConfig;
 	int w, h;
 
-	LOGD("%s()", __func__);
 	// only support 1 physical screen now
 
 	// create egl surface from native window
@@ -190,11 +189,11 @@ void Renderer::terminate()
 	// Delete program object
 	if (gl_ctx.programObjectExternal) {
 		glDeleteProgram(gl_ctx.programObjectExternal);
-		checkGlError("glDeleteProgram1");
+//		checkGlError("glDeleteProgram1");
 	}
 	if (gl_ctx.programObject) {
 		glDeleteProgram(gl_ctx.programObject);
-		checkGlError("glDeleteProgram2");
+//		checkGlError("glDeleteProgram2");
 	}
 
 	if (gl_ctx.eglDisplay != EGL_NO_DISPLAY) {
@@ -220,7 +219,6 @@ int Renderer::makeCurrent()
 {
 	EGLBoolean returnValue;
 
-	LOGI("%s\n", __func__);
 	while (!initialized) {
 		usleep(500000);
 	}
@@ -251,7 +249,6 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 	// 	return;
 	// }
 
-	LOGI("%s -1\n", __func__);
 
 	if (surf->surf_type == SURFACE_DMABUF) {
 		if (gl_ctx.cur_surf.dma_info.dmabuf_fd != 0)
@@ -268,7 +265,7 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 	if (gl_ctx.surf_tex) {
 		// SDL_DestroyTexture(gl_ctx.surf_tex);
 		glDeleteTextures(1, &gl_ctx.surf_tex);
-		checkGlError2("glDeleteTextures", gl_ctx.surf_tex);
+//		checkGlError2("glDeleteTextures", gl_ctx.surf_tex);
 	}
 	if (surf && (surf->surf_type == SURFACE_DMABUF)) {
 		egl_create_dma_tex(&gl_ctx.surf_tex);
@@ -292,11 +289,7 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		attrs[i++] = surf->stride;
 		attrs[i++] = EGL_DMA_BUF_PLANE0_OFFSET_EXT;
 		attrs[i++] = surf->dma_info.dmabuf_offset;
-		LOGI("--yue, EGL_WIDTH is %x, surf->width is %x, EGL_HEIGHT is %x, surf->height is %x\n", EGL_WIDTH, surf->width, EGL_HEIGHT, surf->height);
-		LOGI("--yue EGL_LINUX_DRM_FOURCC_EXT is %x, dma_info.surf_fourcc is %x, EGL_DMA_BUF_PLANE0_FD_EXT is %x, dma_info.dmabuf_fd is %x\n", EGL_LINUX_DRM_FOURCC_EXT, surf->dma_info.surf_fourcc, EGL_DMA_BUF_PLANE0_FD_EXT, surf->dma_info.dmabuf_fd);
-		LOGI("--yue EGL_DMA_BUF_PLANE0_PITCH_EXT is %x, surf->stride is %x, EGL_DMA_BUF_PLANE0_OFFSET_EXT is %x, surf->dma_info.dmabuf_offset is %x\n", EGL_DMA_BUF_PLANE0_PITCH_EXT, surf->stride, EGL_DMA_BUF_PLANE0_OFFSET_EXT, surf->dma_info.dmabuf_offset);
 		if (gl_ctx.modifier) {
-			LOGI("--yue, has modifier\n");
 			attrs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
 			attrs[i++] = gl_ctx.modifier & 0xffffffff;
 			attrs[i++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
@@ -306,13 +299,13 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 
 		for(i=0; i<17; i++)
 			snprintf(tmp, 255, "%s 0x%x", tmp, attrs[i]);
-		LOGI("eglCreateImageKHR attrs=(%s)\n", tmp);
+//		LOGI("eglCreateImageKHR attrs=(%s)\n", tmp);
 
 		egl_img = gl_ops.eglCreateImageKHR(gl_ctx.eglDisplay,
 				EGL_NO_CONTEXT,
 				EGL_LINUX_DMA_BUF_EXT,
 				NULL, attrs);
-		checkEglError("eglCreateImageKHR");
+//		checkEglError("eglCreateImageKHR");
 		if (egl_img == EGL_NO_IMAGE_KHR) {
 			LOGE("Failed in eglCreateImageKHR.\n");
 			return;
@@ -320,9 +313,9 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 
 		// SDL_GL_BindTexture(gl_ctx.surf_tex, NULL, NULL);
 		glBindTexture(GL_TEXTURE_EXTERNAL_OES, gl_ctx.surf_tex);
-		checkGlError2("glBindTexture", gl_ctx.surf_tex);
+//		checkGlError2("glBindTexture", gl_ctx.surf_tex);
 		gl_ops.glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, egl_img);
-		checkGlError("glEGLImageTargetTexture2DOES");
+//		checkGlError("glEGLImageTargetTexture2DOES");
 		if (gl_ctx.egl_img != EGL_NO_IMAGE_KHR)
 			gl_ops.eglDestroyImageKHR(gl_ctx.eglDisplay,
 					gl_ctx.egl_img);
@@ -334,7 +327,6 @@ void Renderer::vdpy_surface_set(struct surface *surf)
 		gl_ctx.egl_img = egl_img;
 	}
 
-	LOGI("%s -2\n", __func__);
 }
 
 void Renderer::vdpy_surface_update()
@@ -395,19 +387,19 @@ int Renderer::egl_render_copy(GLuint src_tex,
 		vVertices[11] = dstrect->y + dstrect->h;
 		vVertices[15] = dstrect->x;
 		vVertices[16] = dstrect->y + dstrect->h;
-		LOGI("%s dstrect={%d, %d, %d, %d}\n",
-				 __func__, dstrect->x, dstrect->y, dstrect->w, dstrect->h);
+//		LOGI("%s dstrect={%d, %d, %d, %d}\n",
+//				 __func__, dstrect->x, dstrect->y, dstrect->w, dstrect->h);
 	} else {
-		LOGI("%s dstrect=NULL\n", __func__);
+//		LOGI("%s dstrect=NULL\n", __func__);
 	}
 
 	// Set the viewport
 	glViewport(0, 0, gl_ctx.width, gl_ctx.height);
-	checkGlError("glViewport");
+//	checkGlError("glViewport");
 
 	// Clear the color buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	checkGlError("glClear");
+//	checkGlError("glClear");
 
 	// Use the program object
 	GLuint program;
@@ -417,57 +409,55 @@ int Renderer::egl_render_copy(GLuint src_tex,
 		program = gl_ctx.programObject;
 	glLinkProgram(program);
 	glUseProgram(program);
-	checkGlError("glUseProgram");
+//	checkGlError("glUseProgram");
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	// Load the vertex position
 	glVertexAttribPointer(0, 3, GL_FLOAT,
 						  GL_FALSE, 5 * sizeof(GLfloat), vVertices);
-	checkGlError("glVertexAttribPointer0");
+//	checkGlError("glVertexAttribPointer0");
 	// Load the texture coordinate
 	glVertexAttribPointer(1, 2, GL_FLOAT,
 						  GL_FALSE, 5 * sizeof(GLfloat), &vVertices[3]);
-	checkGlError("glVertexAttribPointer1");
+//	checkGlError("glVertexAttribPointer1");
 
 	glEnableVertexAttribArray(0);
-	checkGlError("glEnableVertexAttribArray0");
+//	checkGlError("glEnableVertexAttribArray0");
 	glEnableVertexAttribArray(1);
-	checkGlError("glEnableVertexAttribArray1");
+//	checkGlError("glEnableVertexAttribArray1");
 
 	// Bind the base map
 	glActiveTexture(GL_TEXTURE0);
-	checkGlError("glActiveTexture");
+//	checkGlError("glActiveTexture");
 	if (is_dmabuf)
 		glBindTexture(GL_TEXTURE_EXTERNAL_OES, src_tex);
 	else
 		glBindTexture(GL_TEXTURE_2D, src_tex);
-	checkGlError2("glBindTexture", src_tex);
+//	checkGlError2("glBindTexture", src_tex);
 
 	// Set the base map sampler to texture unit to 0
 	// glUniform1i(userData->baseMapLoc, 0);
 	GLuint uniformlocation = glGetUniformLocation(program, "uTexture");
-	checkGlError("glGetUniformLocation");
+//	checkGlError("glGetUniformLocation");
 	glUniform1i(uniformlocation, 0);
-	checkGlError("glUniform1i");
+//	checkGlError("glUniform1i");
 
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
-	checkGlError("glDrawElements");
+//	checkGlError("glDrawElements");
 	return 0;
 }
 
 int Renderer::egl_create_dma_tex(GLuint *texid)
 {
-	LOGI("%s -1\n", __func__);
 	glGenTextures(1, texid);
-	checkGlError2("glGenTextures", *texid);
+//	checkGlError2("glGenTextures", *texid);
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, *texid);
-	checkGlError2("glBindTexture", *texid);
+//	checkGlError2("glBindTexture", *texid);
 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	checkGlError("glTexParameteri");
-	LOGI("%s -2\n", __func__);
+//	checkGlError("glTexParameteri");
 	return 0;
 }
 
@@ -478,7 +468,7 @@ GLuint Renderer::esLoadShader ( GLenum type, const char *shaderSrc )
 
 	// Create the shader object
 	shader = glCreateShader ( type );
-	checkGlError("glCreateShader");
+//	checkGlError("glCreateShader");
 	if ( shader == 0 )
 	{
 		LOGE("%s() failed to create shader!\n", __func__);
@@ -487,21 +477,21 @@ GLuint Renderer::esLoadShader ( GLenum type, const char *shaderSrc )
 
 	// Load the shader source
 	glShaderSource ( shader, 1, &shaderSrc, NULL );
-	checkGlError("glShaderSource");
+//	checkGlError("glShaderSource");
 
 	// Compile the shader
 	glCompileShader ( shader );
-	checkGlError("glCompileShader");
+//	checkGlError("glCompileShader");
 
 	// Check the compile status
 	glGetShaderiv ( shader, GL_COMPILE_STATUS, &compiled );
-	checkGlError("glGetShaderiv");
+//	checkGlError("glGetShaderiv");
 	if ( !compiled )
 	{
 		GLint infoLen = 0;
 
 		glGetShaderiv ( shader, GL_INFO_LOG_LENGTH, &infoLen );
-		checkGlError("glGetShaderiv2");
+//		checkGlError("glGetShaderiv2");
 		if ( infoLen > 1 )
 		{
 			char *infoLog = (char *) malloc ( sizeof ( char ) * infoLen );
@@ -513,7 +503,7 @@ GLuint Renderer::esLoadShader ( GLenum type, const char *shaderSrc )
 		}
 
 		glDeleteShader ( shader );
-		checkGlError("glDeleteShader");
+//		checkGlError("glDeleteShader");
 		LOGE("%s() failed to compile shader!\n", __func__);
 		return 0;
 	}
@@ -541,14 +531,14 @@ GLuint Renderer::esLoadProgram ( const char *vertShaderSrc, const char *fragShad
 	if ( fragmentShader == 0 )
 	{
 		glDeleteShader ( vertexShader );
-		checkGlError("glDeleteShader");
+//		checkGlError("glDeleteShader");
 		LOGE("%s() failed to load fragment shader!\n", __func__);
 		return 0;
 	}
 
 	// Create the program object
 	programObject = glCreateProgram ( );
-	checkGlError("glCreateProgram");
+//	checkGlError("glCreateProgram");
 	if ( programObject == 0 )
 	{
 		LOGE("%s() failed to create program!\n", __func__);
@@ -556,47 +546,47 @@ GLuint Renderer::esLoadProgram ( const char *vertShaderSrc, const char *fragShad
 	}
 
 	glAttachShader ( programObject, vertexShader );
-	checkGlError("glAttachShader");
+//	checkGlError("glAttachShader");
 	glAttachShader ( programObject, fragmentShader );
-	checkGlError("glAttachShader2");
+//	checkGlError("glAttachShader2");
 
 	// Link the program
 	glLinkProgram ( programObject );
-	checkGlError("glLinkProgram");
+//	checkGlError("glLinkProgram");
 
 	// Check the link status
 	glGetProgramiv ( programObject, GL_LINK_STATUS, &linked );
-	checkGlError("glGetProgramiv");
+//	checkGlError("glGetProgramiv");
 
 	if ( !linked )
 	{
 		GLint infoLen = 0;
 
 		glGetProgramiv ( programObject, GL_INFO_LOG_LENGTH, &infoLen );
-		checkGlError("glGetProgramiv2");
+//		checkGlError("glGetProgramiv2");
 
 		if ( infoLen > 1 )
 		{
 			char *infoLog = (char *) malloc ( sizeof ( char ) * infoLen );
 
 			glGetProgramInfoLog ( programObject, infoLen, NULL, infoLog );
-			checkGlError("glGetProgramInfoLog");
+//			checkGlError("glGetProgramInfoLog");
 			LOGE ( "Error linking program:\n%s\n", infoLog );
 
 			free ( infoLog );
 		}
 
 		glDeleteProgram ( programObject );
-		checkGlError("glDeleteProgram");
+//		checkGlError("glDeleteProgram");
 		LOGE("%s() failed to link program!\n", __func__);
 		return 0;
 	}
 
 	// Free up no longer needed shader resources
 	glDeleteShader ( vertexShader );
-	checkGlError("glDeleteShader");
+//	checkGlError("glDeleteShader");
 	glDeleteShader ( fragmentShader );
-	checkGlError("glDeleteShader2");
+//	checkGlError("glDeleteShader2");
 
 	return programObject;
 }

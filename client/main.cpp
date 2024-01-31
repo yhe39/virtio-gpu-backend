@@ -84,13 +84,10 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_SAVE_STATE:
             // We are not saving the state.
-            LOGI("APP_CMD_SAVE_STATE");
             break;
         case APP_CMD_INIT_WINDOW:
             // The window is being shown, get it ready.
-            LOGI("APP_CMD_INIT_WINDOW");
             if (app->window != NULL) {
-                LOGI("APP_CMD_INIT_WINDOW -1");
 #ifdef USE_GAME_RENDER
                 renderer->init(app->window);
                 renderer->draw();
@@ -101,7 +98,6 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 
                 animating = 1;
             }
-            LOGI("APP_CMD_INIT_WINDOW -2");
             break;
         case APP_CMD_TERM_WINDOW:
             // The window is being hidden or closed, clean it up.
@@ -110,40 +106,29 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
 #else
             close_backend_thread();
 #endif
-            LOGI("APP_CMD_TERM_WINDOW");
             animating = 0;
             break;
         case APP_CMD_LOST_FOCUS:
             // Also stop animating.
-            LOGI("APP_CMD_LOST_FOCUS");
             animating = 0;
 #ifdef USE_GAME_RENDER
             renderer->draw();
 #endif
             break;
         case APP_CMD_START:
-            LOGI("APP_CMD_START");
             break;
         case APP_CMD_RESUME:
-            LOGI("APP_CMD_RESUME");
             display_client->start();
             break;
         case APP_CMD_INPUT_CHANGED:
-            LOGI("APP_CMD_INPUT_CHANGED");
             break;
         case APP_CMD_PAUSE:
-            LOGI("APP_CMD_PAUSE - 1");
             display_client->stop();
-            LOGI("APP_CMD_PAUSE - 2");
             break;
         case APP_CMD_STOP:
-            LOGI("APP_CMD_STOP - 1");
-//            display_client->hotplug(1);
             display_client->term();
-            LOGI("APP_CMD_STOP - 2");
             break;
         default:
-            LOGI("APP_CMD %d", cmd);
             break;
     }
 }
@@ -157,8 +142,6 @@ void engine_handle_cmd(struct android_app* app, int32_t cmd) {
  */
 void android_main(struct android_app* state) {
     std::srand(0);
-
-    LOGI("Running with SDK %d", state->activity->sdkVersion);
 
     std::unique_ptr<Renderer> renderer(new Renderer());
     std::unique_ptr<DisplayClient> display_client(new DisplayClient(renderer.get()));
@@ -178,13 +161,11 @@ void android_main(struct android_app* state) {
         // If animating, we loop until all events are read, then continue
         // to draw the next frame of animation.
         while (ALooper_pollAll(0, NULL, &events, (void**)&source) >= 0) {
-            LOGI("ALooper_pollAll -1");
             // Process this event.
             if (source != NULL) {
                 source->process(state, source);
             }
 
-            LOGI("ALooper_pollAll -2");
             // Check if we are exiting.
             if (state->destroyRequested != 0) {
 #ifdef USE_GAME_RENDER
@@ -195,7 +176,6 @@ void android_main(struct android_app* state) {
                 LOGI("state->destroyRequested != 0, exit...");
                 return;
             }
-            LOGI("ALooper_pollAll -3");
         }
 
 #ifdef USE_GAME_RENDER
