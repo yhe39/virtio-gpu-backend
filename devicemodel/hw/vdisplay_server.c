@@ -753,15 +753,6 @@ void triger_init(void (*func)(void *data), void *data)
     triger = func;
 }
 
-static void *triger_data1;
-void (*triger1)(void *data1);
-
-void triger_init1(void (*func1)(void *data1), void *data1)
-{
-    triger_data1 = data1;
-    triger1 = func1;
-}
-
 static void *
 vdpy_sdl_display_thread(void *data __attribute__((unused)))
 {
@@ -771,13 +762,6 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
 
     struct vscreen *vscr;
     int i;
-
-    // if (!is_egl_current) {
-    //     pr_info("vdpy_sdl_display_proc() eglMakeCurrent\n");
-    //     eglMakeCurrent(vdpy.eglDisplay, vdpy.eglSurface, vdpy.eglSurface, vdpy.eglContext);
-    //     checkEglError("eglMakeCurrent");
-    //     is_egl_current = true;
-    // }
 
     for (i = 0; i < vdpy.vscrs_num; i++) {
         vscr = vdpy.vscrs + i;
@@ -820,15 +804,6 @@ vdpy_sdl_display_thread(void *data __attribute__((unused)))
             pr_info("display is exiting\n");
             break;
         }
-///////////////////////////////////////
-//        pr_info("--yue-- loop in SDL display thread\n");
-        if (triger1 != NULL) {
-//            pr_info("--yue-- trigger_data1\n");
-            (*triger1)(triger_data1);
-        } else {
-//            pr_info("--yue-- trigger1 is NULL!\n");
-        }
-///////////////////////////////////
         pthread_mutex_lock(&vdpy.vdisplay_mutex);
 
         if (TAILQ_EMPTY(&vdpy.request_list))
@@ -958,7 +933,6 @@ static inline int client_send(int e_type, void *data, int len)
     int ret;
     struct dpy_evt_header evt_hdr;
 
-    pr_info("%s() -1", __func__);
     if (client_sock == -1) {
         pr_info("%s() invalid sock", __func__);
         return -1;
@@ -980,7 +954,6 @@ static inline int client_send(int e_type, void *data, int len)
             return -1;
         }
     }
-    pr_info("%s() -2", __func__);
     return 0;
 }
 
@@ -1113,33 +1086,21 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 // Accept incoming connection
                 len = sizeof (client_sockaddr);
                 new_client_sock = accept (server_sock, (struct sockaddr*)&client_sockaddr, &len);
-                pr_err("Client connected!\n");
 
                 int flags;
                 flags = fcntl(new_client_sock, F_GETFL, 0);
                 fcntl(new_client_sock, F_SETFL, flags | O_NONBLOCK);
-/*
-        if (triger != NULL) {
-                pr_info("--yue-- trigger hp\n");
-                (*triger)(triger_data);
-        } else {
-                pr_info("--yue-- trigger is NULL!\n");
-        }
-*/
                 // Close previous client connect, and remove listener
                 pthread_mutex_lock(&vdpy.client_mutex);
                 if (client_sock != -1) {
-    pr_info("%s() -4.0\n", __func__);
                     close_client(epollfd, client_sock);
                     client_sock = -1;
                 }
 
-    pr_info("%s() -4.1\n", __func__);
                 client_sock = new_client_sock;
                 if (vscr->set_modifier)
                     client_send(DPY_EVENT_SET_MODIFIER, &vscr->modifier, sizeof(vscr->modifier));
 
-    pr_info("%s() -4.2\n", __func__);
                 // Add new listener
                 event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
                 event.data.fd = client_sock;
@@ -1148,7 +1109,6 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 }
                 pthread_mutex_unlock(&vdpy.client_mutex);
             } else if (events[i].data.fd == client_sock) {
-    pr_info("%s() -5.1\n", __func__);
                 if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
                     pr_err("poll client error: 0x%x", events[i].events);
                     pthread_mutex_lock(&vdpy.client_mutex);
@@ -1157,8 +1117,6 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                     pthread_mutex_unlock(&vdpy.client_mutex);
                     continue;
                 }
-    pr_info("%s() -5.2 - 0x%x\n", __func__, events[i].events);
-
                 pthread_mutex_lock(&vdpy.client_mutex);
                 ret = _recv(client_sock, &msg_header, sizeof(msg_header));
                 if (ret != sizeof(msg_header)) {
@@ -1176,7 +1134,6 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                     continue;
                 }
 
-    pr_info("%s() -5.3\n", __func__);
                 if (msg_header.e_size > 0) {
                     ret = _recv(client_sock, buf, msg_header.e_size);
                     if (ret != msg_header.e_size) {
@@ -1188,7 +1145,6 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                 }
                 pthread_mutex_unlock(&vdpy.client_mutex);
 
-    pr_info("%s() -5.4\n", __func__);
                 switch (msg_header.e_type) {
                     case DPY_EVENT_DISPLAY_INFO:
                     {
@@ -1202,21 +1158,14 @@ vdpy_display_server_thread(void *data __attribute__((unused)))
                     case DPY_EVENT_HOTPLUG:
                     {
                         int is_in = *(int *)buf;
-                        pr_err("--yue-- hotplug event -%d\n", is_in);
                         if (triger != NULL) {
-                                pr_info("--yue-- trigger hp\n");
                                 (*triger)(triger_data);
-                                pr_info("--yue-- trigger hp2\n");
-                        } else {
-                                pr_info("--yue-- trigger is NULL!\n");
                         }
                         if (!is_in) {
-                            pr_err("%s() - before close client socket\n", __func__);
                             pthread_mutex_lock(&vdpy.client_mutex);
                             close_client(epollfd, client_sock);
                             client_sock = -1;
                             pthread_mutex_unlock(&vdpy.client_mutex);
-                            pr_err("%s() - after close client socket\n", __func__);
                         }
                         break;
                     }
@@ -1260,8 +1209,6 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
 
     struct dpy_evt_header msg_header;
 
-    pr_info("%s() -1\n", __func__);
-
     memset(&server_sockaddr, 0, sizeof(struct sockaddr_in));
     server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock == -1){
@@ -1273,14 +1220,12 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
     flags = fcntl(server_sock, F_GETFL, 0);
     fcntl(server_sock, F_SETFL, flags | O_NONBLOCK);
 
-    pr_info("%s() -2\n", __func__);
     server_sockaddr.sin_family = AF_INET;
     server_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     server_sockaddr.sin_port = htons(SERVER_PORT);
     // strcpy(server_sockaddr.sun_path, SERVER_SOCK_PATH);
     len = sizeof(server_sockaddr);
 
-    pr_info("%s() -3\n", __func__);
     // unlink(SERVER_SOCK_PATH);
 
     mode_t mask = 0;
@@ -1311,8 +1256,6 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
         goto close_epoll_fd;
     }
 
-    pr_info("==liang== display server thread is created,listen on port:%d\n",SERVER_PORT);
-
     while (1) {
         int numEvents = epoll_wait(epollfd, events, 5, -1);
         if (numEvents == -1) {
@@ -1334,17 +1277,14 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
                 // Close previous client connect, and remove listener
                 pthread_mutex_lock(&vctl.client_mutex);
                 if (client_sock != -1) {
-                    pr_info("%s() -4.0\n", __func__);
                     close_client(epollfd, client_sock);
                     client_sock = -1;
                 }
 
-                pr_info("%s() -4.1\n", __func__);
                 client_sock = new_client_sock;
                 // if (vscr->set_modifier)
                 //     client_send(DPY_EVENT_SET_MODIFIER, &vscr->modifier, sizeof(vscr->modifier));
 
-                pr_info("%s() -4.2\n", __func__);
                 // Add new listener
                 event.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP;
                 event.data.fd = client_sock;
@@ -1354,7 +1294,6 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
                 pthread_mutex_unlock(&vctl.client_mutex);
 
             } else if (events[i].data.fd == client_sock) {
-                pr_info("%s() -5.1\n", __func__);
                 if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
                     pr_err("poll client error: 0x%x", events[i].events);
                     pthread_mutex_lock(&vctl.client_mutex);
@@ -1363,7 +1302,6 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
                     pthread_mutex_unlock(&vctl.client_mutex);
                     continue;
                 }
-                pr_info("%s() -5.2 - 0x%x\n", __func__, events[i].events);
 
                 pthread_mutex_lock(&vctl.client_mutex);
                 ret = _recv(client_sock, &msg_header, sizeof(msg_header));
@@ -1382,7 +1320,6 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
                     continue;
                 }
 
-                pr_info("%s() -5.3\n", __func__);
                 if (msg_header.e_size > 0) {
                     ret = _recv(client_sock, buf, msg_header.e_size);
                     if (ret != msg_header.e_size) {
@@ -1394,7 +1331,6 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
                 }
                 pthread_mutex_unlock(&vctl.client_mutex);
 
-                pr_info("%s() -5.4\n", __func__);
                 switch (msg_header.e_type) {
                     case DPY_EVENT_START_CAST:
                     {
@@ -1404,11 +1340,7 @@ vdpy_control_server_thread(void *data __attribute__((unused)))
                     case DPY_EVENT_STOP_CAST:
                     {
                         if (triger != NULL) {
-                            pr_info("--yue-- trigger hp\n");
                             (*triger)(triger_data);
-                            pr_info("--yue-- trigger hp2\n");
-                         } else {
-                            pr_info("--yue-- trigger is NULL!\n");
                          }
                         system("am force-stop com.intel.virtio_gpu_backend");
                         break;
@@ -1508,33 +1440,27 @@ vdpy_init(int *num_vscreens)
 
 void vdpy_surface_set(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf __attribute__((unused)))
 {
-    pr_err("%s ---yue", __func__);
     if (!surf || (surf->surf_type != SURFACE_DMABUF)) {
         pr_err("%s Only dma buf is supported!", __func__);
         return;
     }
 
-    pr_err("before send clinet\n");
     pthread_mutex_lock(&vdpy.client_mutex);
     client_send(DPY_EVENT_SURFACE_SET, surf, sizeof(struct surface));
     client_send_fd(surf->dma_info.dmabuf_fd);
     pthread_mutex_unlock(&vdpy.client_mutex);
-    pr_err("after send clinet\n");
 }
 
 void vdpy_surface_update(int handle __attribute__((unused)), int scanout_id __attribute__((unused)), struct surface *surf)
 {
-    pr_err("%s ---yue", __func__);
     if (!surf || (surf->surf_type != SURFACE_DMABUF)) {
         pr_err("%s Only dma buf is supported!", __func__);
         return;
     }
 
-    pr_err("before send clinet\n");
     pthread_mutex_lock(&vdpy.client_mutex);
     client_send(DPY_EVENT_SURFACE_UPDATE, NULL, 0);
     pthread_mutex_unlock(&vdpy.client_mutex);
-    pr_err("after send clinet\n");
 }
 
 void

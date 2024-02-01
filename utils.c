@@ -148,26 +148,19 @@ void *run_backend(void *data, int argc __attribute__((unused)), char *argv[] __a
 	int ret;
 	struct virtio_backend_info *info = (struct virtio_backend_info *)data;
 
-	pr_info	("%s() -1.\n", __func__);
-
 	// parse_shmem_args(info, argc, argv);
 	set_shmem_args(info);
 
-	pr_info	("%s() -2.\n", __func__);
 	if (info->hook_before_init)
 		info->hook_before_init(info);
 
-	pr_info	("%s() -3.\n", __func__);
 	ret = vos_backend_init(info);
 	if (ret)
 		error(1, ret, "Backend initialization failed.\n");
 
-	pr_info	("%s() -4.\n", __func__);
 	vos_backend_run();
 
-	pr_info	("%s() -5.\n", __func__);
 	vos_backend_deinit(info);
-	pr_info	("%s() -6.\n", __func__);
 	return NULL;
 }
 
@@ -175,14 +168,12 @@ void dump_hex(void *base, int size)
 {
 	int i;
 
-	pr_info("==========");
 	for (i = 0; i < size; i++) {
 		if ((i % 16) == 0) {
 			pr_info("\n0x%02x:", i);
 		}
 		pr_info(" %02x", *((uint8_t*)((char*)base + i)));
 	}
-	pr_info("\n==========\n");
 }
 
 void dump_desc(volatile struct vring_desc *desc, int idx, bool cond __attribute__((unused)))
